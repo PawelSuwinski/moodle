@@ -23,7 +23,7 @@
  *
  * @package    auth_db
  * @category   phpunit
- * @copyright  2018 Pawe≥ SuwiÒski 
+ * @copyright  2018 Pawe≈Ç Suwi≈Ñski 
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
