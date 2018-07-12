@@ -138,11 +138,86 @@ class auth_plugin_db extends auth_plugin_base {
                 return (strtolower($fromdb) == sha1($extpassword));
             } else if ($this->config->passtype === 'saltedcrypt') {
                 return password_verify($extpassword, $fromdb);
-            } else {
+            } else if (strpos($this->config->passtype, 'passlib:') === 0) {
+                return $this->passlib_verify($extpassword, $fromdb);
+         } else {
                 return false;
             }
 
         }
+    }
+
+    /**
+     * Execude python code using configured pathtopython
+     *
+     * @param string $code
+     * @return string
+     * @throws moodle_exception
+     */
+    public static function python_exec($code)  {
+        global $CFG;
+        if(empty($CFG->pathtopython)) {
+            throw new moodle_exception('pathtopythonnotset', 'auth_db');
+        }
+
+        $proc = proc_open(
+            $CFG->pathtopython,
+            [['pipe', 'r'], ['pipe', 'w'], ['pipe', 'w']],
+            $pipes
+        );
+        if(!is_resource($proc)) { 
+            throw new moodle_exception('pythonpipeerror', 'auth_db');
+        }
+
+        fwrite($pipes[0], $code);
+        fclose($pipes[0]);
+        $stdout = stream_get_contents($pipes[1]);
+        fclose($pipes[1]);
+        $stderr = stream_get_contents($pipes[2]);
+        fclose($pipes[2]);
+
+        $exitcode = proc_close($proc);
+
+        if($exitcode != 0) {
+            debugging($stdout."\n".$stderr."\n");
+            throw new moodle_exception('pythonexecerror', 'auth_db');
+        }
+        return trim($stdout);
+    }
+
+    /**
+     * Verify password using Passlib 
+     *
+     * @param string $password
+     * @param string $hash
+     * @return bool
+     * @throws moodle_exception
+     */
+    function passlib_verify($password, $hash) {
+        $passlibhandler = substr(
+            $this->config->passtype, 
+            strpos($this->config->passtype, ':') + 1
+        );
+        $password = addslashes($password);
+        $hash = addslashes($hash);
+        $code = <<<EOT
+from passlib.handlers.pbkdf2 import $passlibhandler
+print($passlibhandler.verify("$password", "$hash"))
+EOT;
+        return self::python_exec($code) === 'True' ? true : false; 
+}
+    
+    /**
+     * List all Passlib crypt handlers
+     *
+     * @return array
+     */
+    public static function passlib_list_crypt_handlers() {
+        return explode(',', preg_replace('/[\[\]\'\ ]/', '', self::python_exec(<<<EOT
+from passlib.registry import list_crypt_handlers
+print(list_crypt_handlers())
+EOT
+        )));
     }
 
     /**

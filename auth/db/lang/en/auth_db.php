@@ -76,3 +76,9 @@ $string['auth_dbtableempty'] = 'External table is empty.';
 $string['auth_dbcolumnlist'] = 'External table contains the following columns:<br />{$a}';
 $string['pluginname'] = 'External database';
 $string['privacy:metadata'] = 'The External database authentication plugin does not store any personal data.';
+$string['passlibhandlers'] = 'Passlib crypt handlers';
+$string['passlibhandlerhelp'] = '<p>Using \'Passlib crypt handlers\' requires python-passlib libraries installed on the server along with python binary itself and pathtopyton moodle variable set properly. See Passlib documentation for more explanation.</p>';
+$string['pathtopythonnotset'] = 'Path to python not set!';
+$string['pythonpipeerror'] = 'Python pipe error!';
+$string['pythonexecerror'] = 'Python code execute error!';
+

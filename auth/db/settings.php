@@ -96,8 +96,17 @@ if ($ADMIN->fulltree) {
     $passtype["saltedcrypt"] = get_string("auth_dbsaltedcrypt", "auth_db");
     $passtype["internal"]    = get_string("internal", "auth");
 
+    $passtype[''] = '--- '.get_string("passlibhandlers", "auth_db").' ---';
+
+    require_once($CFG->dirroot.'/auth/db/auth.php');
+    try {
+        foreach (auth_plugin_db::passlib_list_crypt_handlers() as $passlibhandler) {
+            $passtype['passlib:'.$passlibhandler] = $passlibhandler;
+        }
+    } catch(moodle_exception $e) {}
+
     $settings->add(new admin_setting_configselect('auth_db/passtype',
-        new lang_string('auth_dbpasstype_key', 'auth_db'), new lang_string('auth_dbpasstype', 'auth_db'), 'plaintext', $passtype));
+        new lang_string('auth_dbpasstype_key', 'auth_db'), new lang_string('auth_dbpasstype', 'auth_db').new lang_string('passlibhandlerhelp', 'auth_db'), 'plaintext', $passtype));
 
     // Encoding.
     $settings->add(new admin_setting_configtext('auth_db/extencoding', get_string('auth_dbextencoding', 'auth_db'),
