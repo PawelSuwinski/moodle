@@ -99,22 +99,23 @@ if ($ADMIN->fulltree) {
     $passtype[''] = '--- '.get_string("passlibhandlers", "auth_db").' ---';
 
     require_once($CFG->dirroot.'/auth/db/auth.php');
+
+    /*
+     * Exceptions means that requirements are not fullfilled to use this
+     * extension so just  ignore it and show empty list. See help message.
+     */
     try {
         foreach (auth_plugin_db::passlib_list_crypt_handlers() as $passlibhandler) {
             $passtype['passlib:'.$passlibhandler] = $passlibhandler;
         }
-    /*
-     * Exceptions means that requirements are not fullfilled to use this 
-     * extension so just  ignore it and show empty list. See help message. 
-     */
-    } catch(moodle_exception $e) {
+    } catch (moodle_exception $e) {
     }
 
     $settings->add(new admin_setting_configselect(
         'auth_db/passtype',
-        new lang_string('auth_dbpasstype_key', 'auth_db'), 
-        new lang_string('auth_dbpasstype', 'auth_db').new lang_string('passlibhandlerhelp', 'auth_db'), 
-        'plaintext', 
+        new lang_string('auth_dbpasstype_key', 'auth_db'),
+        new lang_string('auth_dbpasstype', 'auth_db').new lang_string('passlibhandlerhelp', 'auth_db'),
+        'plaintext',
         $passtype
     ));
 

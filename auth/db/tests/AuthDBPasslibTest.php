@@ -135,10 +135,10 @@ class AuthDBPasslibTest extends \PHPUnit_Framework_TestCase {
         $e = null;
         try {
             auth_plugin_db::python_exec($cmd);
-        } catch(\Exception $e) {
+        } catch (\Exception $e) {
         }
         $this->assertInstanceOf(moodle_exception::class, $e);
-        if($msg !== null) {
+        if ($msg !== null) {
             $this->assertEquals($msg, $e->getMessage());
         }
     }
@@ -213,14 +213,14 @@ class AuthDBPasslibTest extends \PHPUnit_Framework_TestCase {
             $start = false;
             $code = null;
             while ($line = fgets($fb, 4096)) {
-                if($start && preg_match('/\bfunction /', $line)
+                if ($start && preg_match('/\bfunction /', $line)
                          && !$isPasslibMethod($line)) {
                     break;
                 }
-                if(!$start && $isPasslibMethod($line)) {
+                if (!$start && $isPasslibMethod($line)) {
                     $start = true;
                 }
-                if($start) {
+                if ($start) {
                     $code .= $line;
                 }
             }

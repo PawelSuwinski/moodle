@@ -206,7 +206,7 @@ print($passlibhandler.verify("$password", "$hash"))
 EOT;
         return self::python_exec($code) === 'True' ? true : false;
     }
-  
+
     /**
      * List all Passlib crypt handlers
      *
