@@ -14,6 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
+namespace auth\db\tests;
+
 /**
  * Tets passlib crypt handlers methods.
  * Does not require any special test environment.
@@ -26,9 +28,6 @@
  * @copyright  2018 Paweł Suwiński
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-
-namespace auth\db\tests;
-
 class AuthDBPasslibTest extends \PHPUnit_Framework_TestCase {
 
     /*
