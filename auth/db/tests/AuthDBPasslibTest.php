@@ -47,12 +47,12 @@ class AuthDBPasslibTest extends \PHPUnit_Framework_TestCase {
     );
 
     protected static $pathtopython = null;
-    protected static $passlib_installed = false;
+    protected static $passlibinstalled = false;
 
-    protected static $debugEcho = true;
-    protected static $debugMessages = array();
+    protected static $debugecho = true;
+    protected static $debugmessages = array();
 
-    protected $auth_db;
+    protected $authdb;
 
     /*
      * debugging
@@ -63,8 +63,8 @@ class AuthDBPasslibTest extends \PHPUnit_Framework_TestCase {
      * @return void
      */
     public static function debugging($msg) {
-        self::$debugMessages[] = $msg;
-        if (self::$debugEcho) {
+        self::$debugmessages[] = $msg;
+        if (self::$debugecho) {
             echo $msg."\n";
         }
     }
@@ -75,7 +75,7 @@ class AuthDBPasslibTest extends \PHPUnit_Framework_TestCase {
             ? getenv('PYTHONBIN')
             : self::findPython();
         if (!is_null(self::$pathtopython)) {
-            self::$passlib_installed =
+            self::$passlibinstalled =
                 self::cmd_exec(self::$pathtopython, 'import passlib') !== false;
         }
 
@@ -90,7 +90,7 @@ class AuthDBPasslibTest extends \PHPUnit_Framework_TestCase {
                 'Python not found! Set PYTHONBIN env variable if installed.'
             );
         }
-        if (!self::$passlib_installed) {
+        if (!self::$passlibinstalled) {
             $this->markTestSkipped(
                 'Passlib python module not istalled!'
             );
@@ -103,11 +103,11 @@ class AuthDBPasslibTest extends \PHPUnit_Framework_TestCase {
             $CFG->pathtopython = self::$pathtopython;
         }
 
-        $this->auth_db = new auth_plugin_db();
-        $this->auth_db->config = new \stdClass();
-        $this->auth_db->config->passtype = 'passlib:'.self::HANDLER;
+        $this->authdb = new auth_plugin_db();
+        $this->authdb->config = new \stdClass();
+        $this->authdb->config->passtype = 'passlib:'.self::HANDLER;
 
-        self::$debugEcho = true;
+        self::$debugecho = true;
     }
 
     public function testPathToPythonNotSetException() {
@@ -119,17 +119,17 @@ class AuthDBPasslibTest extends \PHPUnit_Framework_TestCase {
     }
 
     public function testPythonExecErrorException() {
-        self::$debugMessages = array();
-        self::$debugEcho = false;
-        $this->assertCount(0, self::$debugMessages);
+        self::$debugmessages = array();
+        self::$debugecho = false;
+        $this->assertCount(0, self::$debugmessages);
 
         $this->assertMoodleException(
             'import',
             'auth_db:pythonexecerror'
         );
 
-        $this->assertCount(1, self::$debugMessages);
-        $this->assertRegexp('/SyntaxError/', end(self::$debugMessages));
+        $this->assertCount(1, self::$debugmessages);
+        $this->assertRegexp('/SyntaxError/', end(self::$debugmessages));
     }
 
     protected function assertMoodleException($cmd, $msg = null) {
@@ -165,7 +165,7 @@ class AuthDBPasslibTest extends \PHPUnit_Framework_TestCase {
      * @depends testJiraHandlerAvaible
      */
     public function testPasswordValid() {
-        $this->assertTrue($this->auth_db->passlib_verify(
+        $this->assertTrue($this->authdb->passlib_verify(
             self::PASSWORD,
             self::HASH
         ));
@@ -182,7 +182,7 @@ class AuthDBPasslibTest extends \PHPUnit_Framework_TestCase {
      * @return void
      */
     public function testPasswordEscaping($suffix) {
-        $this->assertFalse($this->auth_db->passlib_verify(
+        $this->assertFalse($this->authdb->passlib_verify(
             self::PASSWORD.$suffix,
             self::HASH.$suffix
         ));
