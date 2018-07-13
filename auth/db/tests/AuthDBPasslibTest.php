@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Tets passlib crypt handlers methods. 
+ * Tets passlib crypt handlers methods.
  * Does not require any special test environment.
  *
  *     [@moodle_root/auth/db/]$ phpunit tests/AuthDBPasslibTest.php
@@ -23,7 +23,7 @@
  *
  * @package    auth_db
  * @category   phpunit
- * @copyright  2018 Paweł Suwiński 
+ * @copyright  2018 Paweł Suwiński
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
@@ -64,18 +64,18 @@ class AuthDBPasslibTest extends \PHPUnit_Framework_TestCase {
      */
     public static function debugging($msg) {
         self::$debugMessages[] = $msg;
-        if(self::$debugEcho) {
+        if (self::$debugEcho) {
             echo $msg."\n";
         }
     }
 
     public static function setUpBeforeClass() {
-        
-        self::$pathtopython = getenv('PYTHONBIN') 
-            ? getenv('PYTHONBIN') 
-            : self::findPython(); 
-        if(!is_null(self::$pathtopython)) {
-            self::$passlib_installed = 
+
+        self::$pathtopython = getenv('PYTHONBIN')
+            ? getenv('PYTHONBIN')
+            : self::findPython();
+        if (!is_null(self::$pathtopython)) {
+            self::$passlib_installed =
                 self::cmd_exec(self::$pathtopython, 'import passlib') !== false;
         }
 
@@ -85,21 +85,21 @@ class AuthDBPasslibTest extends \PHPUnit_Framework_TestCase {
     public function setUp() {
         global $CFG;
 
-        if(is_null(self::$pathtopython)) {
+        if (is_null(self::$pathtopython)) {
             $this->markTestSkipped(
                 'Python not found! Set PYTHONBIN env variable if installed.'
             );
         }
-        if(!self::$passlib_installed) {
+        if (!self::$passlib_installed) {
             $this->markTestSkipped(
                 'Passlib python module not istalled!'
             );
         }
 
-        if(!is_object($CFG)) {
+        if (!is_object($CFG)) {
             $CFG = new \stdClass();
         }
-        if(empty($CFG->pathtopython)) {
+        if (empty($CFG->pathtopython)) {
             $CFG->pathtopython = self::$pathtopython;
         }
 
@@ -134,9 +134,10 @@ class AuthDBPasslibTest extends \PHPUnit_Framework_TestCase {
 
     protected function assertMoodleException($cmd, $msg = null) {
         $e = null;
-        try { 
+        try {
             auth_plugin_db::python_exec($cmd);
-        } catch(\Exception $e) {}
+        } catch(\Exception $e) {
+        }
         $this->assertInstanceOf(moodle_exception::class, $e);
         if($msg !== null) {
             $this->assertEquals($msg, $e->getMessage());
@@ -172,17 +173,17 @@ class AuthDBPasslibTest extends \PHPUnit_Framework_TestCase {
 
     /**
      * testPasswordEscaping
-     * 
+     *
      * any special characters shouldn't brake python code
      *
      * @depends testJiraHandlerAvaible
      * @dataProvider providerPasswordEscaping
-     * @param string $suffix 
+     * @param string $suffix
      * @return void
      */
     public function testPasswordEscaping($suffix) {
         $this->assertFalse($this->auth_db->passlib_verify(
-            self::PASSWORD.$suffix, 
+            self::PASSWORD.$suffix,
             self::HASH.$suffix
         ));
     }
@@ -191,30 +192,30 @@ class AuthDBPasslibTest extends \PHPUnit_Framework_TestCase {
      * @return array
      */
     public function providerPasswordEscaping() {
-        return [["'"], ['"'], ['\\']]; 
+        return [["'"], ['"'], ['\\']];
     }
 
 
     /**
-     * initClasses 
+     * initClasses
      *
      * Parses auth.php file looking for passlib crypt handlers methods and
      * creates stubs of auth_plugin_db class containing these methods and
-     * required dependends in tests namespace. 
-     * 
+     * required dependends in tests namespace.
+     *
      * @return void
      */
     protected static function initClasses() {
-        if(!class_exists('auth_plugin_db')) {
+        if (!class_exists('auth_plugin_db')) {
             $isPasslibMethod = function ($line) {
                 return preg_match('/\bfunction ('.implode('|', self::$methods).')\(/', $line);
             };
             $fb = fopen(__DIR__.'/../auth.php', 'r');
             $start = false;
             $code = null;
-            while($line = fgets($fb, 4096)) {
+            while ($line = fgets($fb, 4096)) {
                 if($start && preg_match('/\bfunction /', $line)
-                         && !$isPasslibMethod($line)) { 
+                         && !$isPasslibMethod($line)) {
                     break;
                 }
                 if(!$start && $isPasslibMethod($line)) {
@@ -225,21 +226,21 @@ class AuthDBPasslibTest extends \PHPUnit_Framework_TestCase {
                 }
             }
             fclose($fb);
-            if(empty($code)) {
+            if (empty($code)) {
                 throw new \LogicException('Passlib methods code not found!');
             }
             eval(<<<EOT
 namespace auth\\db\\tests;
-class auth_plugin_db 
-{ 
+
+class auth_plugin_db {
     public \$config;
     $code
 }
 EOT
             );
         }
-        foreach(self::$methods as $method) {
-            if(!is_callable(auth_plugin_db::class.'::'.$method)) {
+        foreach (self::$methods as $method) {
+            if (!is_callable(auth_plugin_db::class.'::'.$method)) {
                 throw new \LogicException(sprintf(
                     'auth.php parser error: method "%s" not defined!',
                     $method
@@ -247,9 +248,10 @@ EOT
             }
         }
 
-        if(!class_exists('moodle_exception')) {
+        if (!class_exists('moodle_exception')) {
             eval(<<<EOT
 namespace auth\\db\\tests;
+
 class moodle_exception extends \Exception {
     public function __construct(\$msg, \$ns) {
         parent::__construct(\$ns.':'.\$msg);
@@ -259,7 +261,7 @@ EOT
             );
         }
 
-        if(!function_exists(__NAMESPACE__.'\debugging')) {
+        if (!function_exists(__NAMESPACE__.'\debugging')) {
             function debugging($msg) {
                 AuthDBPasslibTest::debugging($msg);
             }
@@ -267,17 +269,17 @@ EOT
     }
 
     /**
-     * findPython 
+     * findPython
      *
      * Looks for python path on the server. Return null if not found.
-     * 
+     *
      * @return string
      */
     protected static function findPython() {
         $cmd = strtolower(substr(PHP_OS, 0, 3)) === 'win' ? 'where' : 'which';
-        foreach(['python', 'python3', 'python2'] as $name) {
+        foreach (['python', 'python3', 'python2'] as $name) {
             $pathtopython = self::cmd_exec($cmd.' '.$name);
-            if(!empty($pathtopython)) {
+            if (!empty($pathtopython)) {
                 return $pathtopython;
             }
         }
@@ -286,7 +288,7 @@ EOT
 
     /**
      * shell_exec version with stdin pipe
-     * 
+     *
      * @param string $cmd shell command to execute
      * @param string $stdin strinig to write to command stdin
      * @return mixed false on error and command stdout as string on success
@@ -297,12 +299,12 @@ EOT
             [['pipe', 'r'], ['pipe', 'w'], ['pipe', 'w']],
             $pipes
         );
-        if(!is_resource($proc)) { 
+        if (!is_resource($proc)) {
             throw new \RuntimeException(
                 sprintf('Unable to run command "%s"!', $cmd)
             );
         }
-        if(!is_null($stdin)) {
+        if (!is_null($stdin)) {
             fwrite($pipes[0], $stdin);
         }
         fclose($pipes[0]);

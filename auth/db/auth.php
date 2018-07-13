@@ -140,7 +140,7 @@ class auth_plugin_db extends auth_plugin_base {
                 return password_verify($extpassword, $fromdb);
             } else if (strpos($this->config->passtype, 'passlib:') === 0) {
                 return $this->passlib_verify($extpassword, $fromdb);
-         } else {
+            } else {
                 return false;
             }
 
@@ -154,9 +154,9 @@ class auth_plugin_db extends auth_plugin_base {
      * @return string
      * @throws moodle_exception
      */
-    public static function python_exec($code)  {
+    public static function python_exec($code) {
         global $CFG;
-        if(empty($CFG->pathtopython)) {
+        if (empty($CFG->pathtopython)) {
             throw new moodle_exception('pathtopythonnotset', 'auth_db');
         }
 
@@ -165,7 +165,7 @@ class auth_plugin_db extends auth_plugin_base {
             [['pipe', 'r'], ['pipe', 'w'], ['pipe', 'w']],
             $pipes
         );
-        if(!is_resource($proc)) { 
+        if (!is_resource($proc)) {
             throw new moodle_exception('pythonpipeerror', 'auth_db');
         }
 
@@ -178,7 +178,7 @@ class auth_plugin_db extends auth_plugin_base {
 
         $exitcode = proc_close($proc);
 
-        if($exitcode != 0) {
+        if ($exitcode != 0) {
             debugging($stdout."\n".$stderr."\n");
             throw new moodle_exception('pythonexecerror', 'auth_db');
         }
@@ -186,16 +186,16 @@ class auth_plugin_db extends auth_plugin_base {
     }
 
     /**
-     * Verify password using Passlib 
+     * Verify password using Passlib
      *
      * @param string $password
      * @param string $hash
      * @return bool
      * @throws moodle_exception
      */
-    function passlib_verify($password, $hash) {
+    public function passlib_verify($password, $hash) {
         $passlibhandler = substr(
-            $this->config->passtype, 
+            $this->config->passtype,
             strpos($this->config->passtype, ':') + 1
         );
         $password = addslashes($password);
@@ -204,9 +204,9 @@ class auth_plugin_db extends auth_plugin_base {
 from passlib.handlers.pbkdf2 import $passlibhandler
 print($passlibhandler.verify("$password", "$hash"))
 EOT;
-        return self::python_exec($code) === 'True' ? true : false; 
-}
-    
+        return self::python_exec($code) === 'True' ? true : false;
+    }
+  
     /**
      * List all Passlib crypt handlers
      *
