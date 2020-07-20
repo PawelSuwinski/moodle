@@ -69,7 +69,7 @@ class question_usage_by_activity {
     /** @var string plugin name of the plugin this usage belongs to. */
     protected $owningcomponent;
 
-    /** @var array {@link question_attempt}s that make up this usage. */
+    /** @var question_attempt[] {@link question_attempt}s that make up this usage. */
     protected $questionattempts = array();
 
     /** @var question_usage_observer that tracks changes to this usage. */
@@ -218,10 +218,12 @@ class question_usage_by_activity {
     /**
      * Get the question_definition for a question in this attempt.
      * @param int $slot the number used to identify this question within this usage.
+     * @param bool $requirequestioninitialised set this to false if you don't need
+     *      the behaviour initialised, which may improve performance.
      * @return question_definition the requested question object.
      */
-    public function get_question($slot) {
-        return $this->get_question_attempt($slot)->get_question();
+    public function get_question($slot, $requirequestioninitialised = true) {
+        return $this->get_question_attempt($slot)->get_question($requirequestioninitialised);
     }
 
     /** @return array all the identifying numbers of all the questions in this usage. */
@@ -385,6 +387,7 @@ class question_usage_by_activity {
      * The values are arrays with two items, title and content. Each of these
      * will be either a string, or a renderable.
      *
+     * @param question_display_options $options display options to apply.
      * @return array as described above.
      */
     public function get_summary_information(question_display_options $options) {
@@ -393,21 +396,30 @@ class question_usage_by_activity {
     }
 
     /**
-     * @return string a simple textual summary of the question that was asked.
+     * Get a simple textual summary of the question that was asked.
+     *
+     * @param int $slot the slot number of the question to summarise.
+     * @return string the question summary.
      */
     public function get_question_summary($slot) {
         return $this->get_question_attempt($slot)->get_question_summary();
     }
 
     /**
-     * @return string a simple textual summary of response given.
+     * Get a simple textual summary of response given.
+     *
+     * @param int $slot the slot number of the question to get the response summary for.
+     * @return string the response summary.
      */
     public function get_response_summary($slot) {
         return $this->get_question_attempt($slot)->get_response_summary();
     }
 
     /**
-     * @return string a simple textual summary of the correct resonse.
+     * Get a simple textual summary of the correct response to a question.
+     *
+     * @param int $slot the slot number of the question to get the right answer summary for.
+     * @return string the right answer summary.
      */
     public function get_right_answer_summary($slot) {
         return $this->get_question_attempt($slot)->get_right_answer_summary();
@@ -499,9 +511,8 @@ class question_usage_by_activity {
      * For internal use only. Used when reloading the state of a question from the
      * database.
      *
-     * @param array $records Raw records loaded from the database.
-     * @param int $questionattemptid The id of the question_attempt to extract.
-     * @return question_attempt The newly constructed question_attempt_step.
+     * @param int $slot the slot number of the question to replace.
+     * @param question_attempt $qa the question attempt to put in that place.
      */
     public function replace_loaded_question_attempt_info($slot, $qa) {
         $this->check_slot($slot);
@@ -543,7 +554,7 @@ class question_usage_by_activity {
      * @param int $variant which variant of the question to use. Must be between
      *      1 and ->get_num_variants($slot) inclusive. If not give, a variant is
      *      chosen at random.
-     * @param int $timestamp optional, the timstamp to record for this action. Defaults to now.
+     * @param int|null $timenow optional, the timstamp to record for this action. Defaults to now.
      */
     public function start_question($slot, $variant = null, $timenow = null) {
         if (is_null($variant)) {
@@ -667,7 +678,7 @@ class question_usage_by_activity {
      * particular question.
      *
      * @param int $slot the number used to identify this question within this usage.
-     * @param $postdata optional, only intended for testing. Use this data
+     * @param array|null $postdata optional, only intended for testing. Use this data
      * instead of the data from $_POST.
      * @return array submitted data specific to this question.
      */
@@ -692,7 +703,7 @@ class question_usage_by_activity {
             // Behaviour vars should not be processed by question type, just add prefix.
             $behaviourvars = $this->get_question_attempt($slot)->get_behaviour()->get_expected_data();
             foreach (array_keys($responsedata) as $responsedatakey) {
-                if ($responsedatakey{0} === '-') {
+                if (is_string($responsedatakey) && $responsedatakey[0] === '-') {
                     $behaviourvarname = substr($responsedatakey, 1);
                     if (isset($behaviourvars[$behaviourvarname])) {
                         // Expected behaviour var found.
@@ -722,7 +733,8 @@ class question_usage_by_activity {
     /**
      * Process a specific action on a specific question.
      * @param int $slot the number used to identify this question within this usage.
-     * @param $submitteddata the submitted data that constitutes the action.
+     * @param array $submitteddata the submitted data that constitutes the action.
+     * @param int|null $timestamp (optional) the timestamp to consider 'now'.
      */
     public function process_action($slot, $submitteddata, $timestamp = null) {
         $qa = $this->get_question_attempt($slot);
@@ -733,7 +745,8 @@ class question_usage_by_activity {
     /**
      * Process an autosave action on a specific question.
      * @param int $slot the number used to identify this question within this usage.
-     * @param $submitteddata the submitted data that constitutes the action.
+     * @param array $submitteddata the submitted data that constitutes the action.
+     * @param int|null $timestamp (optional) the timestamp to consider 'now'.
      */
     public function process_autosave($slot, $submitteddata, $timestamp = null) {
         $qa = $this->get_question_attempt($slot);
@@ -743,12 +756,14 @@ class question_usage_by_activity {
     }
 
     /**
-     * Check that the sequence number, that detects weird things like the student
-     * clicking back, is OK. If the sequence check variable is not present, returns
+     * Check that the sequence number, that detects weird things like the student clicking back, is OK.
+     *
+     * If the sequence check variable is not present, returns
      * false. If the check variable is present and correct, returns true. If the
      * variable is present and wrong, throws an exception.
+     *
      * @param int $slot the number used to identify this question within this usage.
-     * @param array $submitteddata the submitted data that constitutes the action.
+     * @param array|null $postdata (optional) data to use in place of $_POST.
      * @return bool true if the check variable is present and correct. False if it
      * is missing. (Throws an exception if the check fails.)
      */
@@ -767,8 +782,9 @@ class question_usage_by_activity {
 
     /**
      * Check, based on the sequence number, whether this auto-save is still required.
+     *
      * @param int $slot the number used to identify this question within this usage.
-     * @param array $submitteddata the submitted data that constitutes the action.
+     * @param array|null $postdata the submitted data that constitutes the action.
      * @return bool true if the check variable is present and correct, otherwise false.
      */
     public function is_autosave_required($slot, $postdata = null) {
@@ -788,7 +804,7 @@ class question_usage_by_activity {
      * Update the flagged state for all question_attempts in this usage, if their
      * flagged state was changed in the request.
      *
-     * @param $postdata optional, only intended for testing. Use this data
+     * @param array|null $postdata optional, only intended for testing. Use this data
      * instead of the data from $_POST.
      */
     public function update_question_flags($postdata = null) {
@@ -824,6 +840,7 @@ class question_usage_by_activity {
      * manual grading, or changing the flag state.
      *
      * @param int $slot the number used to identify this question within this usage.
+     * @param int|null $timestamp (optional) the timestamp to consider 'now'.
      */
     public function finish_question($slot, $timestamp = null) {
         $qa = $this->get_question_attempt($slot);
@@ -834,6 +851,8 @@ class question_usage_by_activity {
     /**
      * Finish the active phase of an attempt at a question. See {@link finish_question()}
      * for a fuller description of what 'finish' means.
+     *
+     * @param int|null $timestamp (optional) the timestamp to consider 'now'.
      */
     public function finish_all_questions($timestamp = null) {
         foreach ($this->questionattempts as $qa) {
@@ -870,7 +889,7 @@ class question_usage_by_activity {
             $newmaxmark = $oldqa->get_max_mark();
         }
 
-        $newqa = new question_attempt($oldqa->get_question(), $oldqa->get_usage_id(),
+        $newqa = new question_attempt($oldqa->get_question(false), $oldqa->get_usage_id(),
                 $this->observer, $newmaxmark);
         $newqa->set_database_id($oldqa->get_database_id());
         $newqa->set_slot($oldqa->get_slot());
@@ -906,7 +925,7 @@ class question_usage_by_activity {
      * For internal use only.
      *
      * @param Iterator $records Raw records loaded from the database.
-     * @param int $questionattemptid The id of the question_attempt to extract.
+     * @param int $qubaid The id of the question usage we are loading.
      * @return question_usage_by_activity The newly constructed usage.
      */
     public static function load_from_records($records, $qubaid) {
@@ -952,8 +971,7 @@ class question_usage_by_activity {
 
 
 /**
- * A class abstracting access to the
- * {@link question_usage_by_activity::$questionattempts} array.
+ * A class abstracting access to the {@link question_usage_by_activity::$questionattempts} array.
  *
  * This class snapshots the list of {@link question_attempts} to iterate over
  * when it is created. If a question is added to the usage mid-iteration, it
@@ -966,15 +984,18 @@ class question_usage_by_activity {
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 class question_attempt_iterator implements Iterator, ArrayAccess {
+
     /** @var question_usage_by_activity that we are iterating over. */
     protected $quba;
-    /** @var array of question numbers. */
+
+    /** @var array of slot numbers. */
     protected $slots;
 
     /**
      * To create an instance of this class, use
      * {@link question_usage_by_activity::get_attempt_iterator()}.
-     * @param $quba the usage to iterate over.
+     *
+     * @param question_usage_by_activity $quba the usage to iterate over.
      */
     public function __construct(question_usage_by_activity $quba) {
         $this->quba = $quba;
@@ -982,37 +1003,83 @@ class question_attempt_iterator implements Iterator, ArrayAccess {
         $this->rewind();
     }
 
-    /** @return question_attempt_step */
+    /**
+     * Standard part of the Iterator interface.
+     *
+     * @return question_attempt
+     */
     public function current() {
         return $this->offsetGet(current($this->slots));
     }
-    /** @return int */
+
+    /**
+     * Standard part of the Iterator interface.
+     *
+     * @return int
+     */
     public function key() {
         return current($this->slots);
     }
+
+    /**
+     * Standard part of the Iterator interface.
+     */
     public function next() {
         next($this->slots);
     }
+
+    /**
+     * Standard part of the Iterator interface.
+     */
     public function rewind() {
         reset($this->slots);
     }
-    /** @return bool */
+
+    /**
+     * Standard part of the Iterator interface.
+     *
+     * @return bool
+     */
     public function valid() {
         return current($this->slots) !== false;
     }
 
-    /** @return bool */
+    /**
+     * Standard part of the ArrayAccess interface.
+     *
+     * @param int $slot
+     * @return bool
+     */
     public function offsetExists($slot) {
         return in_array($slot, $this->slots);
     }
-    /** @return question_attempt_step */
+
+    /**
+     * Standard part of the ArrayAccess interface.
+     *
+     * @param int $slot
+     * @return question_attempt
+     */
     public function offsetGet($slot) {
         return $this->quba->get_question_attempt($slot);
     }
+
+    /**
+     * Standard part of the ArrayAccess interface.
+     *
+     * @param int $slot
+     * @param question_attempt $value
+     */
     public function offsetSet($slot, $value) {
         throw new coding_exception('You are only allowed read-only access to ' .
                 'question_attempt::states through a question_attempt_step_iterator. Cannot set.');
     }
+
+    /**
+     * Standard part of the ArrayAccess interface.
+     *
+     * @param int $slot
+     */
     public function offsetUnset($slot) {
         throw new coding_exception('You are only allowed read-only access to ' .
                 'question_attempt::states through a question_attempt_step_iterator. Cannot unset.');

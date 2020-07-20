@@ -534,8 +534,7 @@ global $FULLSCRIPT;
  */
 global $SCRIPT;
 
-// Set httpswwwroot to $CFG->wwwroot for backwards compatibility
-// The loginhttps option is deprecated, so httpswwwroot is no longer necessary. See MDL-42834.
+// The httpswwwroot has been deprecated, we keep it as an alias for backwards compatibility with plugins only.
 $CFG->httpswwwroot = $CFG->wwwroot;
 
 require_once($CFG->libdir .'/setuplib.php');        // Functions that MUST be loaded first
@@ -565,6 +564,11 @@ if (!PHPUNIT_TEST or PHPUNIT_UTIL) {
 if (defined('BEHAT_SITE_RUNNING') && !defined('BEHAT_TEST') && !defined('BEHAT_UTIL')) {
     require_once(__DIR__ . '/behat/lib.php');
     set_error_handler('behat_error_handler', E_ALL | E_STRICT);
+}
+
+if (defined('WS_SERVER') && WS_SERVER) {
+    require_once($CFG->dirroot . '/webservice/lib.php');
+    set_exception_handler('early_ws_exception_handler');
 }
 
 // If there are any errors in the standard libraries we want to know!
@@ -606,7 +610,6 @@ require_once($CFG->libdir .'/moodlelib.php');       // Other general-purpose fun
 require_once($CFG->libdir .'/enrollib.php');        // Enrolment related functions
 require_once($CFG->libdir .'/pagelib.php');         // Library that defines the moodle_page class, used for $PAGE
 require_once($CFG->libdir .'/blocklib.php');        // Library for controlling blocks
-require_once($CFG->libdir .'/eventslib.php');       // Events functions
 require_once($CFG->libdir .'/grouplib.php');        // Groups functions
 require_once($CFG->libdir .'/sessionlib.php');      // All session and cookie related stuff
 require_once($CFG->libdir .'/editorlib.php');       // All text editor related functions and classes
@@ -621,8 +624,12 @@ setup_validate_php_configuration();
 setup_DB();
 
 if (PHPUNIT_TEST and !PHPUNIT_UTIL) {
-    // make sure tests do not run in parallel
-    test_lock::acquire('phpunit');
+    // Make sure tests do not run in parallel.
+    $suffix = '';
+    if (phpunit_util::is_in_isolated_process()) {
+        $suffix = '.isolated';
+    }
+    test_lock::acquire('phpunit', $suffix);
     $dbhash = null;
     try {
         if ($dbhash = $DB->get_field('config', 'value', array('name'=>'phpunittest'))) {
@@ -786,7 +793,7 @@ if (CLI_SCRIPT) {
 
 // Start session and prepare global $SESSION, $USER.
 if (empty($CFG->sessiontimeout)) {
-    $CFG->sessiontimeout = 7200;
+    $CFG->sessiontimeout = 8 * 60 * 60;
 }
 \core\session\manager::start();
 
@@ -923,53 +930,8 @@ if (!empty($CFG->debugvalidators) and !empty($CFG->guestloginbutton)) {
 // LogFormat to get the current logged in username in moodle.
 // Alternatvely for other web servers a header X-MOODLEUSER can be set which
 // can be using in the logfile and stripped out if needed.
-if ($USER && isset($USER->username)) {
-    $logmethod = '';
-    $logvalue = 0;
-    if (!empty($CFG->apacheloguser) && function_exists('apache_note')) {
-        $logmethod = 'apache';
-        $logvalue = $CFG->apacheloguser;
-    }
-    if (!empty($CFG->headerloguser)) {
-        $logmethod = 'header';
-        $logvalue = $CFG->headerloguser;
-    }
-    if (!empty($logmethod)) {
-        $loguserid = $USER->id;
-        $logusername = clean_filename($USER->username);
-        $logname = '';
-        if (isset($USER->firstname)) {
-            // We can assume both will be set
-            // - even if to empty.
-            $logname = clean_filename($USER->firstname . " " . $USER->lastname);
-        }
-        if (\core\session\manager::is_loggedinas()) {
-            $realuser = \core\session\manager::get_realuser();
-            $logusername = clean_filename($realuser->username." as ".$logusername);
-            $logname = clean_filename($realuser->firstname." ".$realuser->lastname ." as ".$logname);
-            $loguserid = clean_filename($realuser->id." as ".$loguserid);
-        }
-        switch ($logvalue) {
-            case 3:
-                $logname = $logusername;
-                break;
-            case 2:
-                $logname = $logname;
-                break;
-            case 1:
-            default:
-                $logname = $loguserid;
-                break;
-        }
-        if ($logmethod == 'apache') {
-            apache_note('MOODLEUSER', $logname);
-        }
+set_access_log_user();
 
-        if ($logmethod == 'header') {
-            header("X-MOODLEUSER: $logname");
-        }
-    }
-}
 
 // Ensure the urlrewriteclass is setup correctly (to avoid crippling site).
 if (isset($CFG->urlrewriteclass)) {
@@ -1082,4 +1044,16 @@ if (false) {
     $DB = new moodle_database();
     $OUTPUT = new core_renderer(null, null);
     $PAGE = new moodle_page();
+}
+
+// Allow plugins to callback as soon possible after setup.php is loaded.
+$pluginswithfunction = get_plugins_with_function('after_config', 'lib.php');
+foreach ($pluginswithfunction as $plugins) {
+    foreach ($plugins as $function) {
+        try {
+            $function();
+        } catch (Throwable $e) {
+            debugging("Exception calling '$function'", DEBUG_DEVELOPER, $e->getTrace());
+        }
+    }
 }

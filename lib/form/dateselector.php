@@ -97,11 +97,6 @@ class MoodleQuickForm_date_selector extends MoodleQuickForm_group {
                 }
             }
         }
-
-        // The YUI2 calendar only supports the gregorian calendar type.
-        if ($calendartype->get_name() === 'gregorian') {
-            form_init_date_js();
-        }
     }
 
     /**
@@ -140,8 +135,7 @@ class MoodleQuickForm_date_selector extends MoodleQuickForm_group {
         if ($calendartype->get_name() === 'gregorian') {
             $image = $OUTPUT->pix_icon('i/calendar', get_string('calendar', 'calendar'), 'moodle');
             $this->_elements[] = $this->createFormElement('link', 'calendar',
-                    null, '#', $image,
-                    array('class' => 'visibleifjs'));
+                    null, '#', $image);
         }
         // If optional we add a checkbox which the user can use to turn if on
         if ($this->_options['optional']) {
@@ -173,7 +167,7 @@ class MoodleQuickForm_date_selector extends MoodleQuickForm_group {
                 if (null === $value) {
                     // If no boxes were checked, then there is no value in the array
                     // yet we don't want to display default value in this case.
-                    if ($caller->isSubmitted()) {
+                    if ($caller->isSubmitted() && !$caller->is_new_repeat($this->getName())) {
                         $value = $this->_findValue($caller->_submitValues);
                     } else {
                         $value = $this->_findValue($caller->_defaultValues);
@@ -256,7 +250,19 @@ class MoodleQuickForm_date_selector extends MoodleQuickForm_group {
      * @param string $error An error message associated with a group
      */
     function accept(&$renderer, $required = false, $error = null) {
+        form_init_date_js();
         $renderer->renderElement($this, $required, $error);
+    }
+
+    /**
+     * Export for template
+     *
+     * @param renderer_base $output
+     * @return array|stdClass
+     */
+    public function export_for_template(renderer_base $output) {
+        form_init_date_js();
+        return parent::export_for_template($output);
     }
 
     /**

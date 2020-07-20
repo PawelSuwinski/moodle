@@ -691,8 +691,9 @@ class mod_scorm_external extends external_api {
                 $module['coursemodule'] = $scorm->coursemodule;
                 $module['course'] = $scorm->course;
                 $module['name']  = external_format_string($scorm->name, $context->id);
+                $options = array('noclean' => true);
                 list($module['intro'], $module['introformat']) =
-                    external_format_text($scorm->intro, $scorm->introformat, $context->id, 'mod_scorm', 'intro', null);
+                    external_format_text($scorm->intro, $scorm->introformat, $context->id, 'mod_scorm', 'intro', null, $options);
                 $module['introfiles'] = external_util::get_area_files($context->id, 'mod_scorm', 'intro', false, false);
 
                 // Check if the SCORM open and return warnings if so.
@@ -859,7 +860,9 @@ class mod_scorm_external extends external_api {
      * @throws moodle_exception
      */
     public static function launch_sco($scormid, $scoid = 0) {
-        global $DB;
+        global $DB, $CFG;
+
+        require_once($CFG->libdir . '/completionlib.php');
 
         $params = self::validate_parameters(self::launch_sco_parameters(),
                                             array(
@@ -881,6 +884,10 @@ class mod_scorm_external extends external_api {
         if (!empty($params['scoid']) and !($sco = scorm_get_sco($params['scoid'], SCO_ONLY))) {
             throw new moodle_exception('cannotfindsco', 'scorm');
         }
+
+        // Mark module viewed.
+        $completion = new completion_info($course);
+        $completion->set_module_viewed($cm);
 
         list($sco, $scolaunchurl) = scorm_get_sco_and_launch_url($scorm, $params['scoid'], $context);
         // Trigger the SCO launched event.
@@ -905,5 +912,75 @@ class mod_scorm_external extends external_api {
                 'warnings' => new external_warnings()
             )
         );
+    }
+
+    /**
+     * Describes the parameters for get_scorm_access_information.
+     *
+     * @return external_external_function_parameters
+     * @since Moodle 3.7
+     */
+    public static function get_scorm_access_information_parameters() {
+        return new external_function_parameters (
+            array(
+                'scormid' => new external_value(PARAM_INT, 'scorm instance id.')
+            )
+        );
+    }
+
+    /**
+     * Return access information for a given scorm.
+     *
+     * @param int $scormid scorm instance id
+     * @return array of warnings and the access information
+     * @since Moodle 3.7
+     * @throws  moodle_exception
+     */
+    public static function get_scorm_access_information($scormid) {
+        global $DB;
+
+        $params = self::validate_parameters(self::get_scorm_access_information_parameters(), array('scormid' => $scormid));
+
+        // Request and permission validation.
+        $scorm = $DB->get_record('scorm', array('id' => $params['scormid']), '*', MUST_EXIST);
+        list($course, $cm) = get_course_and_cm_from_instance($scorm, 'scorm');
+
+        $context = context_module::instance($cm->id);
+        self::validate_context($context);
+
+        $result = array();
+        // Return all the available capabilities.
+        $capabilities = load_capability_def('mod_scorm');
+        foreach ($capabilities as $capname => $capdata) {
+            // Get fields like cansubmit so it is consistent with the access_information function implemented in other modules.
+            $field = 'can' . str_replace('mod/scorm:', '', $capname);
+            $result[$field] = has_capability($capname, $context);
+        }
+
+        $result['warnings'] = array();
+        return $result;
+    }
+
+    /**
+     * Describes the get_scorm_access_information return value.
+     *
+     * @return external_single_structure
+     * @since Moodle 3.7
+     */
+    public static function get_scorm_access_information_returns() {
+
+        $structure = array(
+            'warnings' => new external_warnings()
+        );
+
+        $capabilities = load_capability_def('mod_scorm');
+        foreach ($capabilities as $capname => $capdata) {
+            // Get fields like cansubmit so it is consistent with the access_information function implemented in other modules.
+            $field = 'can' . str_replace('mod/scorm:', '', $capname);
+            $structure[$field] = new external_value(PARAM_BOOL, 'Whether the user has the capability ' . $capname . ' allowed.',
+                VALUE_OPTIONAL);
+        }
+
+        return new external_single_structure($structure);
     }
 }

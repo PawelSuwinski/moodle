@@ -76,7 +76,7 @@ function get_questions_category( $category, $noparent=false, $recurse=true, $exp
 
     // Get the list of questions for the category
     list($usql, $params) = $DB->get_in_or_equal($categorylist);
-    $questions = $DB->get_records_select('question', "category {$usql} {$npsql}", $params, 'qtype, name');
+    $questions = $DB->get_records_select('question', "category {$usql} {$npsql}", $params, 'category, qtype, name');
 
     // Iterate through questions, getting stuff we need
     $qresults = array();
@@ -490,7 +490,7 @@ function question_build_edit_resources($edittab, $baseurl, $params) {
     foreach ($contexts->having_one_edit_tab_cap($edittab) as $context){
         $contextlistarr[] = "'{$context->id}'";
     }
-    $contextlist = join($contextlistarr, ' ,');
+    $contextlist = join(' ,', $contextlistarr);
     if (!empty($pagevars['cat'])){
         $catparts = explode(',', $pagevars['cat']);
         if (!$catparts[0] || (false !== array_search($catparts[1], $contextlistarr)) ||

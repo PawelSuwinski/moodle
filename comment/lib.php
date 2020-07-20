@@ -220,7 +220,7 @@ class comment {
         // load template
         $this->template = html_writer::start_tag('div', array('class' => 'comment-message'));
 
-        $this->template .= html_writer::start_tag('div', array('class' => 'comment-message-meta m-r-3'));
+        $this->template .= html_writer::start_tag('div', array('class' => 'comment-message-meta mr-3'));
 
         $this->template .= html_writer::tag('span', '___picture___', array('class' => 'picture'));
         $this->template .= html_writer::tag('span', '___name___', array('class' => 'user')) . ' - ';
@@ -493,7 +493,8 @@ class comment {
                 $textareaattrs = array(
                     'name' => 'content',
                     'rows' => 2,
-                    'id' => 'dlg-content-'.$this->cid
+                    'id' => 'dlg-content-'.$this->cid,
+                    'aria-label' => get_string('addcomment')
                 );
                 if (!$this->fullwidth) {
                     $textareaattrs['cols'] = '20';
@@ -536,9 +537,10 @@ class comment {
      * Return matched comments
      *
      * @param  int $page
+     * @param  str $sortdirection sort direction, ASC or DESC
      * @return array
      */
-    public function get_comments($page = '') {
+    public function get_comments($page = '', $sortdirection = 'DESC') {
         global $DB, $CFG, $USER, $OUTPUT;
         if (!$this->can_view()) {
             return false;
@@ -556,6 +558,7 @@ class comment {
             $params['component'] = $component;
         }
 
+        $sortdirection = ($sortdirection === 'ASC') ? 'ASC' : 'DESC';
         $sql = "SELECT $ufields, c.id AS cid, c.content AS ccontent, c.format AS cformat, c.timecreated AS ctimecreated
                   FROM {comments} c
                   JOIN {user} u ON u.id = c.userid
@@ -563,13 +566,13 @@ class comment {
                        c.commentarea = :commentarea AND
                        c.itemid = :itemid AND
                        $componentwhere
-              ORDER BY c.timecreated DESC";
+              ORDER BY c.timecreated $sortdirection, c.id $sortdirection";
         $params['contextid'] = $this->contextid;
         $params['commentarea'] = $this->commentarea;
         $params['itemid'] = $this->itemid;
 
         $comments = array();
-        $formatoptions = array('overflowdiv' => true);
+        $formatoptions = array('overflowdiv' => true, 'blanktarget' => true);
         $rs = $DB->get_recordset_sql($sql, $params, $start, $perpage);
         foreach ($rs as $u) {
             $c = new stdClass();
@@ -716,7 +719,8 @@ class comment {
             $newcmt->fullname = fullname($USER);
             $url = new moodle_url('/user/view.php', array('id' => $USER->id, 'course' => $this->courseid));
             $newcmt->profileurl = $url->out();
-            $newcmt->content = format_text($newcmt->content, $newcmt->format, array('overflowdiv'=>true));
+            $formatoptions = array('overflowdiv' => true, 'blanktarget' => true);
+            $newcmt->content = format_text($newcmt->content, $newcmt->format, $formatoptions);
             $newcmt->avatar = $OUTPUT->user_picture($USER, array('size'=>16));
 
             $commentlist = array($newcmt);

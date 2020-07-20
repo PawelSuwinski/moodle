@@ -108,7 +108,7 @@ class sqlsrv_native_moodle_database extends moodle_database {
         return 'mssql';
     }
 
-   /**
+    /**
      * Returns more specific database driver type
      * Note: can be used before connect()
      * @return string db type mysqli, pgsql, oci, mssql, sqlsrv
@@ -117,7 +117,7 @@ class sqlsrv_native_moodle_database extends moodle_database {
         return 'sqlsrv';
     }
 
-   /**
+    /**
      * Returns general database library name
      * Note: can be used before connect()
      * @return string db type pdo, native
@@ -534,24 +534,12 @@ class sqlsrv_native_moodle_database extends moodle_database {
     }
 
     /**
-     * Returns detailed information about columns in table. This information is cached internally.
+     * Returns detailed information about columns in table.
+     *
      * @param string $table name
-     * @param bool $usecache
      * @return array array of database_column_info objects indexed with column names
      */
-    public function get_columns($table, $usecache = true) {
-        if ($usecache) {
-            if ($this->temptables->is_temptable($table)) {
-                if ($data = $this->get_temp_tables_cache()->get($table)) {
-                    return $data;
-                }
-            } else {
-                if ($data = $this->get_metacache()->get($table)) {
-                    return $data;
-                }
-            }
-        }
-
+    protected function fetch_columns(string $table): array {
         $structure = array();
 
         if (!$this->temptables->is_temptable($table)) { // normal table, get metadata from own schema
@@ -641,14 +629,6 @@ class sqlsrv_native_moodle_database extends moodle_database {
             $structure[$info->name] = new database_column_info($info);
         }
         $this->free_result($result);
-
-        if ($usecache) {
-            if ($this->temptables->is_temptable($table)) {
-                $this->get_temp_tables_cache()->set($table, $structure);
-            } else {
-                $this->get_metacache()->set($table, $structure);
-            }
-        }
 
         return $structure;
     }
@@ -842,6 +822,30 @@ class sqlsrv_native_moodle_database extends moodle_database {
     }
 
     /**
+     * Whether the given SQL statement has the ORDER BY clause in the main query.
+     *
+     * @param string $sql the SQL statement
+     * @return bool true if the main query has the ORDER BY clause; otherwise, false.
+     */
+    protected static function has_query_order_by(string $sql) {
+        $sqltoupper = strtoupper($sql);
+        // Fail fast if there is no ORDER BY clause in the original query.
+        if (strpos($sqltoupper, 'ORDER BY') === false) {
+            return false;
+        }
+
+        // Search for an ORDER BY clause in the main query, not in any subquery (not always allowed in MSSQL)
+        // or in clauses like OVER with a window function e.g. ROW_NUMBER() OVER (ORDER BY ...) or RANK() OVER (ORDER BY ...):
+        // use PHP PCRE recursive patterns to remove everything found within round brackets.
+        $mainquery = preg_replace('/\(((?>[^()]+)|(?R))*\)/', '()', $sqltoupper);
+        if (strpos($mainquery, 'ORDER BY') !== false) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Get a number of records as a moodle_recordset using a SQL statement.
      *
      * Since this method is a little less readable, use of it should be restricted to
@@ -876,9 +880,9 @@ class sqlsrv_native_moodle_database extends moodle_database {
             } else {
                 $needscrollable = false; // Using supported fetch/offset, no need to scroll anymore.
                 $sql = (substr($sql, -1) === ';') ? substr($sql, 0, -1) : $sql;
-                // We need order by to use FETCH/OFFSET.
+                // We need ORDER BY to use FETCH/OFFSET.
                 // Ordering by first column shouldn't break anything if there was no order in the first place.
-                if (!strpos(strtoupper($sql), "ORDER BY")) {
+                if (!self::has_query_order_by($sql)) {
                     $sql .= " ORDER BY 1";
                 }
 

@@ -260,7 +260,6 @@ class course_modinfo {
                 $modnamesused[$mod->modname] = $modnames[$mod->modname];
             }
         }
-        core_collator::asort($modnamesused);
         return $modnamesused;
     }
 
@@ -1575,7 +1574,7 @@ class cm_info implements IteratorAggregate {
         $groupmode = $this->groupmode;
         if ($this->modinfo->get_course()->groupmodeforce) {
             $groupmode = $this->modinfo->get_course()->groupmode;
-            if ($groupmode != NOGROUPS && !plugin_supports('mod', $this->modname, FEATURE_GROUPS, 0)) {
+            if ($groupmode != NOGROUPS && !plugin_supports('mod', $this->modname, FEATURE_GROUPS, false)) {
                 $groupmode = NOGROUPS;
             }
         }

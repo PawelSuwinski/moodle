@@ -38,6 +38,9 @@ use renderable;
  */
 class edit_renderer extends \plugin_renderer_base {
 
+    /** @var string The toggle group name of the checkboxes for the toggle-all functionality. */
+    protected $togglegroup = 'quiz-questions';
+
     /**
      * Render the edit page
      *
@@ -61,15 +64,24 @@ class edit_renderer extends \plugin_renderer_base {
         $output .= $this->quiz_state_warnings($structure);
 
         $output .= html_writer::start_div('mod_quiz-edit-top-controls');
-        $output .= $this->quiz_information($structure);
-        $output .= $this->maximum_grade_input($structure, $pageurl);
 
+        $output .= html_writer::start_div('d-flex justify-content-between flex-wrap mb-1');
+        $output .= html_writer::start_div('d-flex flex-column justify-content-around');
+        $output .= $this->quiz_information($structure);
+        $output .= html_writer::end_tag('div');
+        $output .= $this->maximum_grade_input($structure, $pageurl);
+        $output .= html_writer::end_tag('div');
+
+        $output .= html_writer::start_div('d-flex justify-content-between flex-wrap mb-1');
         $output .= html_writer::start_div('mod_quiz-edit-action-buttons btn-group edit-toolbar', ['role' => 'group']);
         $output .= $this->repaginate_button($structure, $pageurl);
         $output .= $this->selectmultiple_button($structure);
         $output .= html_writer::end_tag('div');
 
+        $output .= html_writer::start_div('d-flex flex-column justify-content-around');
         $output .= $this->total_marks($quizobj->get_quiz());
+        $output .= html_writer::end_tag('div');
+        $output .= html_writer::end_tag('div');
 
         $output .= $this->selectmultiple_controls($structure);
         $output .= html_writer::end_tag('div');
@@ -178,7 +190,7 @@ class edit_renderer extends \plugin_renderer_base {
                 'name' => 'maxgrade', 'size' => ($structure->get_decimal_places_for_grades() + 2),
                 'value' => $structure->formatted_quiz_grade(),
                 'class' => 'form-control'));
-        $output .= html_writer::empty_tag('input', array('type' => 'submit', 'class' => 'btn btn-secondary m-l-1',
+        $output .= html_writer::empty_tag('input', array('type' => 'submit', 'class' => 'btn btn-secondary ml-1',
                 'name' => 'savechanges', 'value' => get_string('save', 'quiz')));
         $output .= html_writer::end_tag('fieldset');
         $output .= html_writer::end_tag('form');
@@ -193,7 +205,6 @@ class edit_renderer extends \plugin_renderer_base {
      * @return string HTML to output.
      */
     protected function repaginate_button(structure $structure, \moodle_url $pageurl) {
-
         $header = html_writer::tag('span', get_string('repaginatecommand', 'quiz'), array('class' => 'repaginatecommand'));
         $form = $this->repaginate_form($structure, $pageurl);
 
@@ -202,14 +213,14 @@ class edit_renderer extends \plugin_renderer_base {
             'name'  => 'repaginate',
             'id'    => 'repaginatecommand',
             'value' => get_string('repaginatecommand', 'quiz'),
-            'class' => 'btn btn-secondary m-b-1',
+            'class' => 'btn btn-secondary',
             'data-header' => $header,
             'data-form'   => $form,
         );
         if (!$structure->can_be_repaginated()) {
             $buttonoptions['disabled'] = 'disabled';
         } else {
-            $this->page->requires->yui_module('moodle-mod_quiz-repaginate', 'M.mod_quiz.repaginate.init');
+            $this->page->requires->js_call_amd('mod_quiz/repaginate', 'init');
         }
 
         return html_writer::empty_tag('input', $buttonoptions);
@@ -227,7 +238,7 @@ class edit_renderer extends \plugin_renderer_base {
             'name'  => 'selectmultiple',
             'id'    => 'selectmultiplecommand',
             'value' => get_string('selectmultipleitems', 'quiz'),
-            'class' => 'btn btn-secondary m-b-1'
+            'class' => 'btn btn-secondary'
         );
         if (!$structure->can_be_edited()) {
             $buttonoptions['disabled'] = 'disabled';
@@ -250,7 +261,11 @@ class edit_renderer extends \plugin_renderer_base {
             'type' => 'button',
             'id' => 'selectmultipledeletecommand',
             'value' => get_string('deleteselected', 'mod_quiz'),
-            'class' => 'btn btn-secondary'
+            'class' => 'btn btn-secondary',
+            'data-action' => 'toggle',
+            'data-togglegroup' => $this->togglegroup,
+            'data-toggle' => 'action',
+            'disabled' => true
         );
         $buttoncanceloptions = array(
             'type' => 'button',
@@ -260,7 +275,7 @@ class edit_renderer extends \plugin_renderer_base {
         );
 
         $groupoptions = array(
-            'class' => 'btn-group selectmultiplecommand actions',
+            'class' => 'btn-group selectmultiplecommand actions m-1',
             'role' => 'group'
         );
 
@@ -271,29 +286,26 @@ class edit_renderer extends \plugin_renderer_base {
                 $buttoncanceloptions), $groupoptions);
 
         $toolbaroptions = array(
-            'class' => 'btn-toolbar',
+            'class' => 'btn-toolbar m-1',
             'role' => 'toolbar',
             'aria-label' => get_string('selectmultipletoolbar', 'quiz'),
         );
 
         // Select all/deselect all questions.
-        $buttonselectalloptions = array(
-            'role' => 'button',
-            'id' => 'questionselectall',
-            'class' => 'btn btn-link'
-        );
-        $buttondeselectalloptions = array(
-            'role' => 'button',
-            'id' => 'questiondeselectall',
-            'class' => 'btn btn-link'
-        );
-        $output .= html_writer::tag('div',
-                html_writer::tag('div',
-                        html_writer::link('#', get_string('selectall', 'quiz'), $buttonselectalloptions) .
-                        html_writer::tag('span', "/", ['class' => 'separator']) .
-                        html_writer::link('#', get_string('selectnone', 'quiz'), $buttondeselectalloptions),
-                        array('class' => 'btn-group selectmultiplecommandbuttons')),
-                $toolbaroptions);
+        $selectallid = 'questionselectall';
+        $selectalltext = get_string('selectall', 'moodle');
+        $deselectalltext = get_string('deselectall', 'moodle');
+        $mastercheckbox = new \core\output\checkbox_toggleall($this->togglegroup, true, [
+            'id' => $selectallid,
+            'name' => $selectallid,
+            'value' => 1,
+            'label' => $selectalltext,
+            'selectall' => $selectalltext,
+            'deselectall' => $deselectalltext,
+        ], true);
+
+        $selectdeselect = html_writer::div($this->render($mastercheckbox), 'selectmultiplecommandbuttons');
+        $output .= html_writer::tag('div', $selectdeselect, $toolbaroptions);
         return $output;
     }
 
@@ -320,7 +332,7 @@ class edit_renderer extends \plugin_renderer_base {
             'type' => 'submit',
             'name' => 'repaginate',
             'value' => get_string('go'),
-            'class' => 'btn btn-secondary m-l-1'
+            'class' => 'btn btn-secondary ml-1'
         );
 
         $formcontent = html_writer::tag('form', html_writer::div(
@@ -655,18 +667,20 @@ class edit_renderer extends \plugin_renderer_base {
         $actions['questionbank'] = new \action_menu_link_secondary($pageurl, $icon, $str->questionbank, $attributes);
 
         // Add a random question.
-        $returnurl = new \moodle_url('/mod/quiz/edit.php', array('cmid' => $structure->get_cmid(), 'data-addonpage' => $page));
-        $params = array('returnurl' => $returnurl, 'cmid' => $structure->get_cmid(), 'appendqnumstring' => 'addarandomquestion');
-        $url = new \moodle_url('/mod/quiz/addrandom.php', $params);
-        $icon = new \pix_icon('t/add', $str->addarandomquestion, 'moodle', array('class' => 'iconsmall', 'title' => ''));
-        $attributes = array('class' => 'cm-edit-action addarandomquestion', 'data-action' => 'addarandomquestion');
-        if ($page) {
-            $title = get_string('addrandomquestiontopage', 'quiz', $page);
-        } else {
-            $title = get_string('addrandomquestionatend', 'quiz');
+        if ($structure->can_add_random_questions()) {
+            $returnurl = new \moodle_url('/mod/quiz/edit.php', array('cmid' => $structure->get_cmid(), 'data-addonpage' => $page));
+            $params = ['returnurl' => $returnurl, 'cmid' => $structure->get_cmid(), 'appendqnumstring' => 'addarandomquestion'];
+            $url = new \moodle_url('/mod/quiz/addrandom.php', $params);
+            $icon = new \pix_icon('t/add', $str->addarandomquestion, 'moodle', array('class' => 'iconsmall', 'title' => ''));
+            $attributes = array('class' => 'cm-edit-action addarandomquestion', 'data-action' => 'addarandomquestion');
+            if ($page) {
+                $title = get_string('addrandomquestiontopage', 'quiz', $page);
+            } else {
+                $title = get_string('addrandomquestionatend', 'quiz');
+            }
+            $attributes = array_merge(array('data-header' => $title, 'data-addonpage' => $page), $attributes);
+            $actions['addarandomquestion'] = new \action_menu_link_secondary($url, $icon, $str->addarandomquestion, $attributes);
         }
-        $attributes = array_merge(array('data-header' => $title, 'data-addonpage' => $page), $attributes);
-        $actions['addarandomquestion'] = new \action_menu_link_secondary($url, $icon, $str->addarandomquestion, $attributes);
 
         // Add a new section to the add_menu if possible. This is always added to the HTML
         // then hidden with CSS when no needed, so that as things are re-ordered, etc. with
@@ -727,10 +741,13 @@ class edit_renderer extends \plugin_renderer_base {
         }
 
         $output .= html_writer::start_div('mod-indent-outer');
-        $output .= html_writer::tag('input', '', array('id' => 'selectquestion-' .
-                $structure->get_displayed_number_for_slot($slot), 'name' => 'selectquestion[]',
-               'type' => 'checkbox', 'class' => 'select-multiple-checkbox',
-               'value' => $structure->get_displayed_number_for_slot($slot)));
+        $checkbox = new \core\output\checkbox_toggleall($this->togglegroup, false, [
+            'id' => 'selectquestion-' . $structure->get_displayed_number_for_slot($slot),
+            'name' => 'selectquestion[]',
+            'value' => $structure->get_displayed_number_for_slot($slot),
+            'classes' => 'select-multiple-checkbox',
+        ]);
+        $output .= $this->render($checkbox);
         $output .= $this->question_number($structure->get_displayed_number_for_slot($slot));
 
         // This div is used to indent the content.
@@ -938,7 +955,7 @@ class edit_renderer extends \plugin_renderer_base {
         $namestr = $qtype->local_name();
 
         $icon = $this->pix_icon('icon', $namestr, $qtype->plugin_name(), array('title' => $namestr,
-                'class' => 'icon activityicon', 'alt' => ' ', 'role' => 'presentation'));
+                'class' => 'activityicon', 'alt' => ' ', 'role' => 'presentation'));
 
         $editicon = $this->pix_icon('t/edit', '', 'moodle', array('title' => ''));
 
@@ -1150,6 +1167,8 @@ class edit_renderer extends \plugin_renderer_base {
 
         $this->page->requires->strings_for_js(array(
                 'addpagebreak',
+                'cannotremoveallsectionslots',
+                'cannotremoveslots',
                 'confirmremovesectionheading',
                 'confirmremovequestion',
                 'dragtoafter',

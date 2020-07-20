@@ -188,7 +188,8 @@ abstract class qbehaviour_renderer extends plugin_renderer_base {
     public function manual_comment_view(question_attempt $qa, question_display_options $options) {
         $output = '';
         if ($qa->has_manual_comment()) {
-            $output .= get_string('commentx', 'question', $qa->get_behaviour()->format_comment(null, null, $options->context));
+            $output .= get_string('commentx', 'question',
+                    $qa->get_behaviour(false)->format_comment(null, null, $options->context));
         }
         if ($options->manualcommentlink) {
             $url = new moodle_url($options->manualcommentlink, array('slot' => $qa->get_slot()));
@@ -234,7 +235,7 @@ abstract class qbehaviour_renderer extends plugin_renderer_base {
             'id' => $qa->get_behaviour_field_name('submit'),
             'name' => $qa->get_behaviour_field_name('submit'),
             'value' => get_string('check', 'question'),
-            'class' => 'submit btn btn-default',
+            'class' => 'submit btn btn-secondary',
         );
         if ($options->readonly) {
             $attributes['disabled'] = 'disabled';
@@ -242,7 +243,7 @@ abstract class qbehaviour_renderer extends plugin_renderer_base {
         $output = html_writer::empty_tag('input', $attributes);
         if (!$options->readonly) {
             $this->page->requires->js_init_call('M.core_question_engine.init_submit_button',
-                    array($attributes['id'], $qa->get_slot()));
+                    array($attributes['id']));
         }
         return $output;
     }

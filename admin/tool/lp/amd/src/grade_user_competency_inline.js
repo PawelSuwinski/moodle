@@ -94,8 +94,9 @@ define(['jquery',
         var options = [],
             self = this;
 
+        M.util.js_pending('tool_lp/grade_user_competency_inline:_setUp');
         var promise = ScaleValues.get_values(self._scaleId);
-        promise.done(function(scalevalues) {
+        promise.then(function(scalevalues) {
             options.push({
                 value: '',
                 name: self._chooseStr
@@ -109,8 +110,13 @@ define(['jquery',
                 });
             }
 
-            self._dialogue = new GradeDialogue(options);
-            self._dialogue.on('rated', function(e, data) {
+            return options;
+        })
+        .then(function(options) {
+            return new GradeDialogue(options);
+        })
+        .then(function(dialogue) {
+            dialogue.on('rated', function(e, data) {
                 var args = self._args;
                 args.grade = data.rating;
                 args.note = data.note;
@@ -123,7 +129,16 @@ define(['jquery',
                     fail: notification.exception
                 }]);
             });
-        }).fail(notification.exception);
+
+            return dialogue;
+        })
+        .then(function(dialogue) {
+            self._dialogue = dialogue;
+
+            M.util.js_complete('tool_lp/grade_user_competency_inline:_setUp');
+            return;
+        })
+        .fail(notification.exception);
     };
 
     /** @type {Number} The scale id for this competency. */

@@ -101,6 +101,9 @@ class mod_glossary_external extends external_api {
             'casesensitive' => new external_value(PARAM_BOOL, 'When true, the matching is case sensitive'),
             'fullmatch' => new external_value(PARAM_BOOL, 'When true, the matching is done on full words only'),
             'approved' => new external_value(PARAM_BOOL, 'Whether the entry was approved'),
+            'tags' => new external_multiple_structure(
+                \core_tag\external\tag_item_exporter::get_read_structure(), 'Tags', VALUE_OPTIONAL
+            ),
         );
 
         if ($includecat) {
@@ -149,6 +152,8 @@ class mod_glossary_external extends external_api {
         if (!empty($definitioninlinefiles)) {
             $entry->definitioninlinefiles = $definitioninlinefiles;
         }
+
+        $entry->tags = \core_tag\external\util::get_item_tags('mod_glossary', 'glossary_entries', $entry->id);
     }
 
     /**
@@ -217,8 +222,10 @@ class mod_glossary_external extends external_api {
             foreach ($glossaries as $glossary) {
                 $context = context_module::instance($glossary->coursemodule);
                 $glossary->name = external_format_string($glossary->name, $context->id);
-                list($glossary->intro, $glossary->introformat) = external_format_text($glossary->intro, $glossary->introformat,
-                    $context->id, 'mod_glossary', 'intro', null);
+                $options = array('noclean' => true);
+                list($glossary->intro, $glossary->introformat) =
+                    external_format_text($glossary->intro, $glossary->introformat, $context->id, 'mod_glossary', 'intro', null,
+                        $options);
                 $glossary->introfiles = external_util::get_area_files($context->id, 'mod_glossary', 'intro', false, false);
 
                 // Make sure we have a number of entries per page.

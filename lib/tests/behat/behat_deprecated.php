@@ -42,44 +42,23 @@ use Behat\Mink\Exception\ElementNotFoundException as ElementNotFoundException,
 class behat_deprecated extends behat_base {
 
     /**
-     * Sets the specified value to the field.
-     *
-     * @Given /^I set the field "(?P<field_string>(?:[^"]|\\")*)" to multiline$/
-     * @throws ElementNotFoundException Thrown by behat_base::find
-     * @param string $field
-     * @param PyStringNode $value
-     * @deprecated since Moodle 3.2 MDL-55406 - please do not use this step any more.
+     * Docks a block. Editing mode should be previously enabled.
+     * @throws ExpectationException
+     * @param string $blockname
+     * @return void
+     * @deprecated since Moodle 3.7 MDL-64506 - please do not use this definition step any more.
+     * @todo MDL-65215 This will be deleted in Moodle 4.1.
      */
-    public function i_set_the_field_to_multiline($field, PyStringNode $value) {
+    public function i_dock_block($blockname) {
 
-        $alternative = 'I set the field "' . $this->escape($field) . '"  to multiline:';
-        $this->deprecated_message($alternative);
+        $message = "Block docking is no longer used as of MDL-64506. Please update your tests.";
+        $this->deprecated_message($message);
 
-        $this->execute('behat_forms::i_set_the_field_to_multiline', array($field, $value));
-    }
-
-    /**
-     * Click on a given link in the moodle-actionmenu that is currently open.
-     * @Given /^I follow "(?P<link_string>(?:[^"]|\\")*)" in the open menu$/
-     * @param string $linkstring the text (or id, etc.) of the link to click.
-     * @deprecated since Moodle 3.2 MDL-55839 - please do not use this step any more.
-     */
-    public function i_follow_in_the_open_menu($linkstring) {
-        $alternative = 'I choose "' . $this->escape($linkstring) . '" from the open action menu';
-        $this->deprecated_message($alternative, true);
-    }
-
-    /**
-     * Navigates to the course gradebook and selects a specified item from the grade navigation tabs.
-     * @Given /^I go to "(?P<gradepath_string>(?:[^"]|\\")*)" in the course gradebook$/
-     * @param string $gradepath
-     * @deprecated since Moodle 3.3 MDL-57282 - please do not use this step any more.
-     */
-    public function i_go_to_in_the_course_gradebook($gradepath) {
-        $alternative = 'I navigate to "' . $this->escape($gradepath) . '"  in the course gradebook';
-        $this->deprecated_message($alternative);
-
-        $this->execute('behat_grade::i_navigate_to_in_the_course_gradebook', $gradepath);
+        // Looking for both title and alt.
+        $xpath = "//input[@type='image'][@title='" . get_string('dockblock', 'block', $blockname) . "' or @alt='" . get_string('addtodock', 'block') . "']";
+        $this->execute('behat_general::i_click_on_in_the',
+                array($xpath, "xpath_element", $this->escape($blockname), "block")
+        );
     }
 
     /**

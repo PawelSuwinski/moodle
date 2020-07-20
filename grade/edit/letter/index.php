@@ -48,7 +48,6 @@ $returnurl = null;
 $editparam = null;
 if ($context->contextlevel == CONTEXT_SYSTEM or $context->contextlevel == CONTEXT_COURSECAT) {
     require_once $CFG->libdir.'/adminlib.php';
-    require_login();
 
     admin_externalpage_setup('letters');
 
@@ -138,10 +137,14 @@ if (!$edit) {
         redirect($returnurl);
 
     } else if ($data = $mform->get_data()) {
+
+        // Make sure we are updating the cache.
+        $cache = cache::make('core', 'grade_letters');
+
         if (!$admin and empty($data->override)) {
             $records = $DB->get_records('grade_letters', array('contextid' => $context->id));
             foreach ($records as $record) {
-                $DB->delete_record('grade_letters', array('id' => $record->id));
+                $DB->delete_records('grade_letters', array('id' => $record->id));
                 // Trigger the letter grade deleted event.
                 $event = \core\event\grade_letter_deleted::create(array(
                     'objectid' => $record->id,
@@ -149,6 +152,9 @@ if (!$edit) {
                 ));
                 $event->trigger();
             }
+
+            // Make sure we clear the cache for this context.
+            $cache->delete($context->id);
             redirect($returnurl);
         }
 
@@ -221,6 +227,15 @@ if (!$edit) {
                 ));
                 $event->trigger();
             }
+        }
+
+        // Cache the changed letters.
+        if (!empty($letters)) {
+
+            // For some reason, the cache saves it in the order in which they were entered
+            // but we really want to order them in descending order so we sort it here.
+            krsort($letters);
+            $cache->set($context->id, $letters);
         }
 
         // Delete the unused records.

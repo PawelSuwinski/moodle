@@ -26,8 +26,6 @@ namespace core_grading\privacy;
 
 defined('MOODLE_INTERNAL') || die();
 
-use core_privacy\local\request\approved_contextlist;
-
 /**
  * The trait used to provide backwards compatability for third-party plugins.
  *
@@ -37,34 +35,22 @@ use core_privacy\local\request\approved_contextlist;
 trait gradingform_legacy_polyfill {
 
     /**
-     * This method is used to export any user data this sub-plugin has using the object to get the context and userid.
+     * Export user data relating to an instance ID.
      *
-     * @param context $context Context owner of the data.
-     * @param stdClass $definition Grading definition entry to export.
-     * @param int $userid The user whose information is to be exported.
-     *
-     * @return stdClass The data to export.
+     * @param  \context $context Context to use with the export writer.
+     * @param  int $instanceid The instance ID to export data for.
+     * @param  array $subcontext The directory to export this data to.
      */
-    public static function get_gradingform_export_data(\context $context, $definition, int $userid) {
-        return static::_get_gradingform_export_data($context, $definition, $userid);
+    public static function export_gradingform_instance_data(\context $context, int $instanceid, array $subcontext) {
+        static::_export_gradingform_instance_data($context, $instanceid, $subcontext);
     }
 
     /**
-     * Any call to this method should delete all user data for the context defined.
+     * Deletes all user data related to the provided instance IDs.
      *
-     * @param context $context Context owner of the data.
+     * @param  array  $instanceids The instance IDs to delete information from.
      */
-    public static function delete_gradingform_for_context(\context $context) {
-        static::_delete_gradingform_for_context($context);
-    }
-
-    /**
-     * A call to this method should delete user data (where practicle) from the userid and context.
-     *
-     * @param int $userid The user whose information is to be deleted.
-     * @param context $context Context owner of the data.
-     */
-    public static function delete_gradingform_for_userid(int $userid, \context $context) {
-        static::_delete_gradingform_for_userid($userid, $context);
+    public static function delete_gradingform_for_instances(array $instanceids) {
+        static::_delete_gradingform_for_instances($instanceids);
     }
 }

@@ -125,8 +125,8 @@ function xmldb_main_install() {
         'backup_version'        => 2008111700,
         'backup_release'        => '2.0 dev',
         'mnet_dispatcher_mode'  => 'off',
-        'sessiontimeout'        => 7200, // must be present during roles installation
-        'stringfilters'         => '', // These two are managed in a strange way by the filters
+        'sessiontimeout'        => 8 * 60 * 60, // Must be present during roles installation.
+        'stringfilters'         => '', // These two are managed in a strange way by the filters.
         'filterall'             => 0, // setting page, so have to be initialised here.
         'texteditors'           => 'atto,tinymce,textarea',
         'antiviruses'           => '',
@@ -284,9 +284,10 @@ function xmldb_main_install() {
     set_role_contextlevels($guestrole,          get_default_contextlevels('guest'));
     set_role_contextlevels($userrole,           get_default_contextlevels('user'));
 
-    // Init theme and JS revisions
+    // Init theme, JS and template revisions.
     set_config('themerev', time());
     set_config('jsrev', time());
+    set_config('templaterev', time());
 
     // No admin setting for this any more, GD is now required, remove in Moodle 2.6.
     set_config('gdversion', 2);
@@ -320,6 +321,6 @@ function xmldb_main_install() {
     make_default_scale();
     make_competence_scale();
 
-    // Add built-in prediction models.
-    \core_analytics\manager::add_builtin_models();
+    require_once($CFG->dirroot . '/badges/upgradelib.php'); // Core install and upgrade related functions only for badges.
+    badges_install_default_backpacks();
 }

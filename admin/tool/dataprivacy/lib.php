@@ -63,6 +63,43 @@ function tool_dataprivacy_myprofile_navigation(tree $tree, $user, $iscurrentuser
         $node = new core_user\output\myprofile\node('privacyandpolicies', 'datarequests',
             get_string('datarequests', 'tool_dataprivacy'), null, $url);
         $category->add_node($node);
+
+        // Check if the user has an ongoing data export request.
+        $hasexportrequest = \tool_dataprivacy\api::has_ongoing_request($user->id, \tool_dataprivacy\api::DATAREQUEST_TYPE_EXPORT);
+        // Show data export link only if the user doesn't have an ongoing data export request.
+        if (!$hasexportrequest) {
+            $exportparams = ['type' => \tool_dataprivacy\api::DATAREQUEST_TYPE_EXPORT];
+            $exporturl = new moodle_url('/admin/tool/dataprivacy/createdatarequest.php', $exportparams);
+            $exportnode = new core_user\output\myprofile\node('privacyandpolicies', 'requestdataexport',
+                get_string('requesttypeexport', 'tool_dataprivacy'), null, $exporturl);
+            $category->add_node($exportnode);
+        }
+
+        // Check if the user has an ongoing data deletion request.
+        $hasdeleterequest = \tool_dataprivacy\api::has_ongoing_request($user->id, \tool_dataprivacy\api::DATAREQUEST_TYPE_DELETE);
+        // Show data deletion link only if the user doesn't have an ongoing data deletion request and has permission
+        // to create data deletion request.
+        if (!$hasdeleterequest && \tool_dataprivacy\api::can_create_data_deletion_request_for_self()) {
+            $deleteparams = ['type' => \tool_dataprivacy\api::DATAREQUEST_TYPE_DELETE];
+            $deleteurl = new moodle_url('/admin/tool/dataprivacy/createdatarequest.php', $deleteparams);
+            $deletenode = new core_user\output\myprofile\node('privacyandpolicies', 'requestdatadeletion',
+                get_string('deletemyaccount', 'tool_dataprivacy'), null, $deleteurl);
+            $category->add_node($deletenode);
+        }
+    }
+
+    // A returned 0 means that the setting was set and disabled, false means that there is no value for the provided setting.
+    $showsummary = get_config('tool_dataprivacy', 'showdataretentionsummary');
+    if ($showsummary === false) {
+        // This means that no value is stored in db. We use the default value in this case.
+        $showsummary = true;
+    }
+
+    if ($showsummary) {
+        $summaryurl = new moodle_url('/admin/tool/dataprivacy/summary.php');
+        $summarynode = new core_user\output\myprofile\node('privacyandpolicies', 'retentionsummary',
+            get_string('dataretentionsummary', 'tool_dataprivacy'), null, $summaryurl);
+        $category->add_node($summarynode);
     }
 
     // Add the Privacy category to the tree if it's not empty and it doesn't exist.
@@ -75,6 +112,29 @@ function tool_dataprivacy_myprofile_navigation(tree $tree, $user, $iscurrentuser
     }
 
     return false;
+}
+
+/**
+ * Callback to add footer elements.
+ *
+ * @return string HTML footer content
+ */
+function tool_dataprivacy_standard_footer_html() {
+    $output = '';
+
+    // A returned 0 means that the setting was set and disabled, false means that there is no value for the provided setting.
+    $showsummary = get_config('tool_dataprivacy', 'showdataretentionsummary');
+    if ($showsummary === false) {
+        // This means that no value is stored in db. We use the default value in this case.
+        $showsummary = true;
+    }
+
+    if ($showsummary) {
+        $url = new moodle_url('/admin/tool/dataprivacy/summary.php');
+        $output = html_writer::link($url, get_string('dataretentionsummary', 'tool_dataprivacy'));
+        $output = html_writer::div($output, 'tool_dataprivacy');
+    }
+    return $output;
 }
 
 /**
@@ -185,26 +245,23 @@ function tool_dataprivacy_output_fragment_contextlevel_form($args) {
  * @return bool Returns false if we don't find a file.
  */
 function tool_dataprivacy_pluginfile($course, $cm, $context, $filearea, $args, $forcedownload, array $options = array()) {
-    global $USER;
-
     if ($context->contextlevel == CONTEXT_USER) {
         // Make sure the user is logged in.
         require_login(null, false);
 
-        // Validate the user downloading this archive.
-        $usercontext = context_user::instance($USER->id);
-        // The user downloading this is not the user the archive has been prepared for. Check if it's the requester (e.g. parent).
-        if ($usercontext->instanceid !== $context->instanceid) {
-            // Get the data request ID. This should be the first element of the $args array.
-            $itemid = $args[0];
-            // Fetch the data request object. An invalid ID will throw an exception.
-            $datarequest = new \tool_dataprivacy\data_request($itemid);
+        // Get the data request ID. This should be the first element of the $args array.
+        $itemid = $args[0];
+        // Fetch the data request object. An invalid ID will throw an exception.
+        $datarequest = new \tool_dataprivacy\data_request($itemid);
 
-            // Check if the user is the requester and has the capability to make data requests for the target user.
-            $candownloadforuser = has_capability('tool/dataprivacy:makedatarequestsforchildren', $context);
-            if ($USER->id != $datarequest->get('requestedby') || !$candownloadforuser) {
-                return false;
-            }
+        // Check if user is allowed to download it.
+        if (!\tool_dataprivacy\api::can_download_data_request_for_user($context->instanceid, $datarequest->get('requestedby'))) {
+            return false;
+        }
+
+        // Make the file unavailable if it has expired.
+        if (\tool_dataprivacy\data_request::is_expired($datarequest)) {
+            send_file_not_found();
         }
 
         // All good. Serve the exported data.

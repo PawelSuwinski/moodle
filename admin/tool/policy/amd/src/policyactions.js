@@ -30,26 +30,17 @@ define([
 function($, Ajax, Notification, ModalFactory, ModalEvents) {
 
     /**
-     * List of action selectors.
-     *
-     * @type {{VIEW_POLICY: string}}
-     */
-    var ACTIONS = {
-        VIEW_POLICY: '[data-action="view"]'
-    };
-
-    /**
      * PolicyActions class.
      */
-    var PolicyActions = function() {
-        this.registerEvents();
+    var PolicyActions = function(root) {
+        this.registerEvents(root);
     };
 
     /**
      * Register event listeners.
      */
-    PolicyActions.prototype.registerEvents = function() {
-        $(ACTIONS.VIEW_POLICY).click(function(e) {
+    PolicyActions.prototype.registerEvents = function(root) {
+        root.on("click", function(e) {
             e.preventDefault();
 
             var versionid = $(this).data('versionid');
@@ -65,43 +56,55 @@ function($, Ajax, Notification, ModalFactory, ModalEvents) {
                 args: params
             };
 
+            var modalTitle = $.Deferred();
+            var modalBody = $.Deferred();
+
+            var modal = ModalFactory.create({
+                title: modalTitle,
+                body: modalBody,
+                large: true
+            })
+            .then(function(modal) {
+                // Handle hidden event.
+                modal.getRoot().on(ModalEvents.hidden, function() {
+                    // Destroy when hidden.
+                    modal.destroy();
+                });
+
+                return modal;
+            })
+            .then(function(modal) {
+                modal.show();
+
+                return modal;
+            })
+            .catch(Notification.exception);
+
+            // Make the request now that the modal is configured.
             var promises = Ajax.call([request]);
-            var modalTitle = '';
-            var modalType = ModalFactory.types.DEFAULT;
             $.when(promises[0]).then(function(data) {
                 if (data.result.policy) {
-                    modalTitle = data.result.policy.name;
-                    return data.result.policy.content;
+                    modalTitle.resolve(data.result.policy.name);
+                    modalBody.resolve(data.result.policy.content);
+
+                    return data;
+                } else {
+                    throw new Error(data.warnings[0].message);
                 }
-                // Fail.
-                Notification.addNotification({
-                    message: data.warnings[0].message,
+            }).catch(function(message) {
+                modal.then(function(modal) {
+                    modal.hide();
+                    modal.destroy();
+
+                    return modal;
+                })
+                .catch(Notification.exception);
+
+                return Notification.addNotification({
+                    message: message,
                     type: 'error'
                 });
-                return false;
-
-            }).then(function(html) {
-                if (html != false) {
-                    return ModalFactory.create({
-                        title: modalTitle,
-                        body: html,
-                        type: modalType,
-                        large: true
-                    }).then(function(modal) {
-                        // Handle hidden event.
-                        modal.getRoot().on(ModalEvents.hidden, function() {
-                            // Destroy when hidden.
-                            modal.destroy();
-                        });
-
-                        return modal;
-                    });
-                }
-                return false;
-            }).done(function(modal) {
-                // Show the modal.
-                modal.show();
-            }).fail(Notification.exception);
+            });
         });
 
     };
@@ -115,8 +118,9 @@ function($, Ajax, Notification, ModalFactory, ModalEvents) {
          * @method init
          * @return {PolicyActions}
          */
-        'init': function() {
-            return new PolicyActions();
+        'init': function(root) {
+            root = $(root);
+            return new PolicyActions(root);
         }
     };
 });

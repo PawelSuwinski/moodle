@@ -102,6 +102,16 @@ class data_request_exporter extends persistent_exporter {
                 'optional' => true,
                 'default' => false
             ],
+            'approvedeny' => [
+                'type' => PARAM_BOOL,
+                'optional' => true,
+                'default' => false
+            ],
+            'canmarkcomplete' => [
+                'type' => PARAM_BOOL,
+                'optional' => true,
+                'default' => false
+            ],
         ];
     }
 
@@ -140,37 +150,50 @@ class data_request_exporter extends persistent_exporter {
 
         $values['messagehtml'] = text_to_html($this->persistent->get('comments'));
 
-        $values['typename'] = helper::get_request_type_string($this->persistent->get('type'));
-        $values['typenameshort'] = helper::get_shortened_request_type_string($this->persistent->get('type'));
+        $requesttype = $this->persistent->get('type');
+        $values['typename'] = helper::get_request_type_string($requesttype);
+        $values['typenameshort'] = helper::get_shortened_request_type_string($requesttype);
 
         $values['canreview'] = false;
+        $values['approvedeny'] = false;
         $values['statuslabel'] = helper::get_request_status_string($this->persistent->get('status'));
+
         switch ($this->persistent->get('status')) {
             case api::DATAREQUEST_STATUS_PENDING:
-                $values['statuslabelclass'] = 'label-default';
-                break;
-            case api::DATAREQUEST_STATUS_PREPROCESSING:
-                $values['statuslabelclass'] = 'label-default';
+                $values['statuslabelclass'] = 'badge-info';
+                // Request can be manually completed for general enquiry requests.
+                $values['canmarkcomplete'] = $requesttype == api::DATAREQUEST_TYPE_OTHERS;
                 break;
             case api::DATAREQUEST_STATUS_AWAITING_APPROVAL:
-                $values['statuslabelclass'] = 'label-info';
+                $values['statuslabelclass'] = 'badge-info';
                 // DPO can review the request once it's ready.
                 $values['canreview'] = true;
+                // Whether the DPO can approve or deny the request.
+                $values['approvedeny'] = in_array($requesttype, [api::DATAREQUEST_TYPE_EXPORT, api::DATAREQUEST_TYPE_DELETE]);
+                // If the request's type is delete, check if user have permission to approve/deny it.
+                if ($requesttype == api::DATAREQUEST_TYPE_DELETE) {
+                    $values['approvedeny'] = api::can_create_data_deletion_request_for_other();
+                }
                 break;
             case api::DATAREQUEST_STATUS_APPROVED:
-                $values['statuslabelclass'] = 'label-info';
+                $values['statuslabelclass'] = 'badge-info';
                 break;
             case api::DATAREQUEST_STATUS_PROCESSING:
-                $values['statuslabelclass'] = 'label-info';
+                $values['statuslabelclass'] = 'badge-info';
                 break;
             case api::DATAREQUEST_STATUS_COMPLETE:
-                $values['statuslabelclass'] = 'label-success';
+            case api::DATAREQUEST_STATUS_DOWNLOAD_READY:
+            case api::DATAREQUEST_STATUS_DELETED:
+                $values['statuslabelclass'] = 'badge-success';
                 break;
             case api::DATAREQUEST_STATUS_CANCELLED:
-                $values['statuslabelclass'] = 'label-warning';
+                $values['statuslabelclass'] = 'badge-warning';
                 break;
             case api::DATAREQUEST_STATUS_REJECTED:
-                $values['statuslabelclass'] = 'label-important';
+                $values['statuslabelclass'] = 'badge-danger';
+                break;
+            case api::DATAREQUEST_STATUS_EXPIRED:
+                $values['statuslabelclass'] = 'badge-secondary';
                 break;
         }
 

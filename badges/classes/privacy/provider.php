@@ -24,6 +24,7 @@
  */
 
 namespace core_badges\privacy;
+
 defined('MOODLE_INTERNAL') || die();
 
 use badge;
@@ -37,6 +38,8 @@ use core_privacy\local\metadata\collection;
 use core_privacy\local\request\approved_contextlist;
 use core_privacy\local\request\transform;
 use core_privacy\local\request\writer;
+use core_privacy\local\request\userlist;
+use core_privacy\local\request\approved_userlist;
 
 require_once($CFG->libdir . '/badgeslib.php');
 
@@ -50,6 +53,7 @@ require_once($CFG->libdir . '/badgeslib.php');
  */
 class provider implements
     \core_privacy\local\metadata\provider,
+    \core_privacy\local\request\core_userlist_provider,
     \core_privacy\local\request\subsystem\provider {
 
     /**
@@ -88,7 +92,7 @@ class provider implements
         $collection->add_database_table('badge_backpack', [
             'userid' => 'privacy:metadata:backpack:userid',
             'email' => 'privacy:metadata:backpack:email',
-            'backpackurl' => 'privacy:metadata:backpack:backpackurl',
+            'externalbackpackid' => 'privacy:metadata:backpack:externalbackpackid',
             'backpackuid' => 'privacy:metadata:backpack:backpackuid',
             // The columns autosync and password are not used.
         ], 'privacy:metadata:backpack');
@@ -100,6 +104,14 @@ class provider implements
             'url' => 'privacy:metadata:external:backpacks:url',
             'issuer' => 'privacy:metadata:external:backpacks:issuer',
         ], 'privacy:metadata:external:backpacks');
+
+        $collection->add_database_table('badge_backpack_oauth2', [
+            'userid' => 'privacy:metadata:backpackoauth2:userid',
+            'usermodified' => 'privacy:metadata:backpackoauth2:usermodified',
+            'token' => 'privacy:metadata:backpackoauth2:token',
+            'issuerid' => 'privacy:metadata:backpackoauth2:issuerid',
+            'scope' => 'privacy:metadata:backpackoauth2:scope',
+        ], 'privacy:metadata:backpackoauth2');
 
         return $collection;
     }
@@ -171,6 +183,79 @@ class provider implements
         $contextlist->add_from_sql($sql, $params);
 
         return $contextlist;
+    }
+
+    /**
+     * Get the list of users within a specific context.
+     *
+     * @param userlist $userlist The userlist containing the list of users who have data in this context/plugin combination.
+     */
+    public static function get_users_in_context(userlist $userlist) {
+        $context = $userlist->get_context();
+
+        $allowedcontexts = [
+            CONTEXT_COURSE,
+            CONTEXT_SYSTEM,
+            CONTEXT_USER
+        ];
+
+        if (!in_array($context->contextlevel, $allowedcontexts)) {
+            return;
+        }
+
+        if ($context->contextlevel == CONTEXT_COURSE || $context->contextlevel == CONTEXT_SYSTEM) {
+            // Find the modifications we made on badges (course & system).
+            if ($context->contextlevel == CONTEXT_COURSE) {
+                $extrawhere = 'AND b.courseid = :courseid';
+                $params = [
+                    'badgetype' => BADGE_TYPE_COURSE,
+                    'courseid'  => $context->instanceid
+                ];
+            } else {
+                $extrawhere = '';
+                $params = ['badgetype' => BADGE_TYPE_SITE];
+            }
+
+            $sql = "SELECT b.usermodified, b.usercreated
+                      FROM {badge} b
+                     WHERE b.type = :badgetype
+                           $extrawhere";
+
+            $userlist->add_from_sql('usermodified', $sql, $params);
+            $userlist->add_from_sql('usercreated', $sql, $params);
+        }
+
+        if ($context->contextlevel == CONTEXT_USER) {
+            // Find where we've manually awarded a badge (recipient user context).
+            $params = [
+                'instanceid' => $context->instanceid
+            ];
+
+            $sql = "SELECT issuerid, recipientid
+                      FROM {badge_manual_award}
+                     WHERE recipientid = :instanceid";
+
+            $userlist->add_from_sql('issuerid', $sql, $params);
+            $userlist->add_from_sql('recipientid', $sql, $params);
+
+            $sql = "SELECT userid
+                      FROM {badge_issued}
+                     WHERE userid = :instanceid";
+
+            $userlist->add_from_sql('userid', $sql, $params);
+
+            $sql = "SELECT userid
+                      FROM {badge_criteria_met}
+                     WHERE userid = :instanceid";
+
+            $userlist->add_from_sql('userid', $sql, $params);
+
+            $sql = "SELECT userid
+                      FROM {badge_backpack}
+                     WHERE userid = :instanceid";
+
+            $userlist->add_from_sql('userid', $sql, $params);
+        }
     }
 
     /**
@@ -300,18 +385,40 @@ class provider implements
 
             // Export the badges.
             $uniqueid = $DB->sql_concat_join("'-'", ['b.id', 'COALESCE(bc.id, 0)', 'COALESCE(bi.id, 0)',
-                'COALESCE(bma.id, 0)', 'COALESCE(bcm.id, 0)']);
+                'COALESCE(bma.id, 0)', 'COALESCE(bcm.id, 0)', 'COALESCE(brb.id, 0)', 'COALESCE(ba.id, 0)']);
             $sql = "
                 SELECT $uniqueid AS uniqueid, b.id,
                        bi.id AS biid, bi.dateissued, bi.dateexpire, bi.uniquehash,
                        bma.id AS bmaid, bma.datemet, bma.issuerid,
                        bcm.id AS bcmid,
                        c.fullname AS coursename,
+                       be.id AS beid,
+                       be.issuername AS beissuername,
+                       be.issuerurl AS beissuerurl,
+                       be.issueremail AS beissueremail,
+                       be.claimid AS beclaimid,
+                       be.claimcomment AS beclaimcomment,
+                       be.dateissued AS bedateissued,
+                       brb.id as rbid,
+                       brb.badgeid as rbbadgeid,
+                       brb.relatedbadgeid as rbrelatedbadgeid,
+                       ba.id as baid,
+                       ba.targetname as batargetname,
+                       ba.targeturl as batargeturl,
+                       ba.targetdescription as batargetdescription,
+                       ba.targetframework as batargetframework,
+                       ba.targetcode as batargetcode,
                        $ctxfields
                   FROM {badge} b
              LEFT JOIN {badge_issued} bi
                     ON bi.badgeid = b.id
                    AND bi.userid = :userid1
+            LEFT JOIN {badge_related} brb
+                    ON ( b.id = brb.badgeid OR b.id = brb.relatedbadgeid )
+             LEFT JOIN {badge_alignment} ba
+                    ON ( b.id = ba.badgeid )
+             LEFT JOIN {badge_endorsement} be
+                    ON be.badgeid = b.id
              LEFT JOIN {badge_manual_award} bma
                     ON bma.badgeid = b.id
                    AND bma.recipientid = :userid2
@@ -345,14 +452,32 @@ class provider implements
                 if ($carry === null) {
                     $carry = [
                         'name' => $badge->name,
+                        'version' => $badge->version,
+                        'language' => $badge->language,
+                        'imageauthorname' => $badge->imageauthorname,
+                        'imageauthoremail' => $badge->imageauthoremail,
+                        'imageauthorurl' => $badge->imageauthorurl,
+                        'imagecaption' => $badge->imagecaption,
                         'issued' => null,
                         'manual_award' => null,
-                        'criteria_met' => []
+                        'criteria_met' => [],
+                        'endorsement' => null,
                     ];
 
                     if ($badge->type == BADGE_TYPE_COURSE) {
                         context_helper::preload_from_record($record);
                         $carry['course'] = format_string($record->coursename, true, ['context' => $badge->get_context()]);
+                    }
+
+                    if (!empty($record->beid)) {
+                        $carry['endorsement'] = [
+                            'issuername' => $record->beissuername,
+                            'issuerurl' => $record->beissuerurl,
+                            'issueremail' => $record->beissueremail,
+                            'claimid' => $record->beclaimid,
+                            'claimcomment' => $record->beclaimcomment,
+                            'dateissued' => $record->bedateissued ? transform::datetime($record->bedateissued) : null
+                        ];
                     }
 
                     if (!empty($record->biid)) {
@@ -368,6 +493,52 @@ class provider implements
                             'awarded_on' => transform::datetime($record->datemet),
                             'issuer' => transform::user($record->issuerid)
                         ];
+                    }
+                }
+                if (!empty($record->rbid)) {
+                    if (empty($carry['related_badge'])) {
+                        $carry['related_badge'] = [];
+                    }
+                    $rbid = $record->rbbadgeid;
+                    if ($rbid == $record->id) {
+                        $rbid = $record->rbrelatedbadgeid;
+                    }
+                    $exists = false;
+                    foreach ($carry['related_badge'] as $related) {
+                        if ($related['badgeid'] == $rbid) {
+                            $exists = true;
+                            break;
+                        }
+                    }
+                    if (!$exists) {
+                        $relatedbadge = new badge($rbid);
+                        $carry['related_badge'][] = [
+                            'badgeid' => $rbid,
+                            'badgename' => $relatedbadge->name
+                        ];
+                    }
+                }
+
+                if (!empty($record->baid)) {
+                    if (empty($carry['alignment'])) {
+                        $carry['alignment'] = [];
+                    }
+                    $exists = false;
+                    $newalignment = [
+                        'targetname' => $record->batargetname,
+                        'targeturl' => $record->batargeturl,
+                        'targetdescription' => $record->batargetdescription,
+                        'targetframework' => $record->batargetframework,
+                        'targetcode' => $record->batargetcode,
+                    ];
+                    foreach ($carry['alignment'] as $alignment) {
+                        if ($alignment == $newalignment) {
+                            $exists = true;
+                            break;
+                        }
+                    }
+                    if (!$exists) {
+                        $carry['alignment'][] = $newalignment;
                     }
                 }
 
@@ -412,7 +583,7 @@ class provider implements
             foreach ($recordset as $record) {
                 $data[] = [
                     'email' => $record->email,
-                    'url' => $record->backpackurl,
+                    'externalbackpackid' => $record->externalbackpackid,
                     'uid' => $record->backpackuid
                 ];
             }
@@ -437,6 +608,24 @@ class provider implements
 
         // Delete all the user data.
         static::delete_user_data($context->instanceid);
+    }
+
+    /**
+     * Delete multiple users within a single context.
+     *
+     * @param approved_userlist $userlist The approved context and user information to delete information for.
+     */
+    public static function delete_data_for_users(approved_userlist $userlist) {
+        $context = $userlist->get_context();
+
+        if (!in_array($context->instanceid, $userlist->get_userids())) {
+            return;
+        }
+
+        if ($context->contextlevel == CONTEXT_USER) {
+            // We can only delete our own data in the user context, nothing in course or system.
+            static::delete_user_data($context->instanceid);
+        }
     }
 
     /**

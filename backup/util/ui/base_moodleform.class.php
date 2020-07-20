@@ -391,7 +391,7 @@ abstract class base_moodleform extends moodleform {
             $config->title = get_string('confirmcancel', 'backup');
         }
         $config->question = get_string('confirmcancelquestion', 'backup');
-        $config->yesLabel = get_string('confirmcancelyes', 'backup');
+        $config->yesLabel = $config->title;
         $config->noLabel = get_string('confirmcancelno', 'backup');
         $config->closeButtonTitle = get_string('close', 'editor');
         $PAGE->requires->yui_module(
@@ -402,7 +402,8 @@ abstract class base_moodleform extends moodleform {
 
         // Get list of module types on course.
         $modinfo = get_fast_modinfo($COURSE);
-        $modnames = $modinfo->get_used_module_names(true);
+        $modnames = array_map('strval', $modinfo->get_used_module_names(true));
+        core_collator::asort($modnames);
         $PAGE->requires->yui_module('moodle-backup-backupselectall', 'M.core_backup.backupselectall',
                 array($modnames));
         $PAGE->requires->strings_for_js(array('select', 'all', 'none'), 'moodle');

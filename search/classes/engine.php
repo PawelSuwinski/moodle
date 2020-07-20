@@ -199,6 +199,7 @@ abstract class engine {
         $doc->set_data_from_engine($docdata);
         $doc->set_doc_url($searcharea->get_doc_url($doc));
         $doc->set_context_url($searcharea->get_context_url($doc));
+        $doc->set_doc_icon($searcharea->get_doc_icon($doc));
 
         // Uses the internal caches to get required data needed to render the document later.
         $course = $this->get_course($doc->get('courseid'));
@@ -217,8 +218,8 @@ abstract class engine {
      * and and have the search engine back end add them
      * to the index.
      *
-     * @param iterator $iterator the iterator of documents to index
-     * @param searcharea $searcharea the area for the documents to index
+     * @param \iterator $iterator the iterator of documents to index
+     * @param base $searcharea the area for the documents to index
      * @param array $options document indexing options
      * @return array Processed document counts
      */
@@ -226,10 +227,14 @@ abstract class engine {
         $numrecords = 0;
         $numdocs = 0;
         $numdocsignored = 0;
+        $numbatches = 0;
         $lastindexeddoc = 0;
         $firstindexeddoc = 0;
         $partial = false;
         $lastprogress = manager::get_current_time();
+
+        $batchmode = $this->supports_add_document_batch();
+        $currentbatch = [];
 
         foreach ($iterator as $document) {
             // Stop if we have exceeded the time limit (and there are still more items). Always
@@ -254,10 +259,22 @@ abstract class engine {
                 $searcharea->attach_files($document);
             }
 
-            if ($this->add_document($document, $options['indexfiles'])) {
-                $numdocs++;
+            if ($batchmode && strlen($document->get('content')) <= $this->get_batch_max_content()) {
+                $currentbatch[] = $document;
+                if (count($currentbatch) >= $this->get_batch_max_documents()) {
+                    [$processed, $failed, $batches] = $this->add_document_batch($currentbatch, $options['indexfiles']);
+                    $numdocs += $processed;
+                    $numdocsignored += $failed;
+                    $numbatches += $batches;
+                    $currentbatch = [];
+                }
             } else {
-                $numdocsignored++;
+                if ($this->add_document($document, $options['indexfiles'])) {
+                    $numdocs++;
+                } else {
+                    $numdocsignored++;
+                }
+                $numbatches++;
             }
 
             $lastindexeddoc = $document->get('modified');
@@ -278,7 +295,15 @@ abstract class engine {
             }
         }
 
-        return array($numrecords, $numdocs, $numdocsignored, $lastindexeddoc, $partial);
+        // Add remaining documents from batch.
+        if ($batchmode && $currentbatch) {
+            [$processed, $failed, $batches] = $this->add_document_batch($currentbatch, $options['indexfiles']);
+            $numdocs += $processed;
+            $numdocsignored += $failed;
+            $numbatches += $batches;
+        }
+
+        return [$numrecords, $numdocs, $numdocsignored, $lastindexeddoc, $partial, $numbatches];
     }
 
     /**
@@ -473,6 +498,27 @@ abstract class engine {
     abstract function add_document($document, $fileindexing = false);
 
     /**
+     * Adds multiple documents to the search engine.
+     *
+     * It should return the number successfully processed, and the number of batches they were
+     * processed in (for example if you add 100 documents and there is an error processing one of
+     * those documents, and it took 4 batches, it would return [99, 1, 4]).
+     *
+     * If the engine implements this, it should return true to {@see supports_add_document_batch}.
+     *
+     * The system will only call this function with up to {@see get_batch_max_documents} documents,
+     * and each document in the batch will have content no larger than specified by
+     * {@see get_batch_max_content}.
+     *
+     * @param document[] $documents Documents to add
+     * @param bool $fileindexing True if file indexing is to be used
+     * @return int[] Array of three elements, successfully processed, failed processed, batch count
+     */
+    public function add_document_batch(array $documents, bool $fileindexing = false): array {
+        throw new \coding_exception('add_document_batch not supported by this engine');
+    }
+
+    /**
      * Executes the query on the engine.
      *
      * Implementations of this function should check user context array to limit the results to contexts where the
@@ -519,6 +565,47 @@ abstract class engine {
      * @return void
      */
     abstract function delete($areaid = null);
+
+    /**
+     * Deletes information related to a specific context id. This should be used when the context
+     * itself is deleted from Moodle.
+     *
+     * This only deletes information for the specified context - not for any child contexts.
+     *
+     * This function is optional; if not supported it will return false and the information will
+     * not be deleted from the search index.
+     *
+     * If an engine implements this function it should also implement delete_index_for_course;
+     * otherwise, nothing will be deleted when users delete an entire course at once.
+     *
+     * @param int $oldcontextid ID of context that has been deleted
+     * @return bool True if implemented
+     * @throws \core_search\engine_exception Engines may throw this exception for any problem
+     */
+    public function delete_index_for_context(int $oldcontextid) {
+        return false;
+    }
+
+    /**
+     * Deletes information related to a specific course id. This should be used when the course
+     * itself is deleted from Moodle.
+     *
+     * This deletes all information relating to that course from the index, including all child
+     * contexts.
+     *
+     * This function is optional; if not supported it will return false and the information will
+     * not be deleted from the search index.
+     *
+     * If an engine implements this function then, ideally, it should also implement
+     * delete_index_for_context so that deletion of single activities/blocks also works.
+     *
+     * @param int $oldcourseid ID of course that has been deleted
+     * @return bool True if implemented
+     * @throws \core_search\engine_exception Engines may throw this exception for any problem
+     */
+    public function delete_index_for_course(int $oldcourseid) {
+        return false;
+    }
 
     /**
      * Checks that the schema is the latest version. If the version stored in config does not match
@@ -610,5 +697,45 @@ abstract class engine {
      */
     public function supports_users() {
         return false;
+    }
+
+    /**
+     * Checks if the search engine supports adding documents in a batch.
+     *
+     * If it returns true to this function, the search engine must implement the add_document_batch
+     * function.
+     *
+     * @return bool True if the search engine supports adding documents in a batch
+     */
+    public function supports_add_document_batch(): bool {
+        return false;
+    }
+
+    /**
+     * Gets the maximum number of documents to send together in batch mode.
+     *
+     * Only relevant if the engine returns true to {@see supports_add_document_batch}.
+     *
+     * Can be overridden by search engine if required.
+     *
+     * @var int Number of documents to send together in batch mode, default 100.
+     */
+    public function get_batch_max_documents(): int {
+        return 100;
+    }
+
+    /**
+     * Gets the maximum size of document content to be included in a shared batch (if the
+     * document is bigger then it will be sent on its own; batching does not provide a performance
+     * improvement for big documents anyway).
+     *
+     * Only relevant if the engine returns true to {@see supports_add_document_batch}.
+     *
+     * Can be overridden by search engine if required.
+     *
+     * @return int Max size in bytes, default 1MB
+     */
+    public function get_batch_max_content(): int {
+        return 1024 * 1024;
     }
 }

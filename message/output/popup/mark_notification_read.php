@@ -31,8 +31,15 @@ if (isguestuser()) {
 }
 
 $notificationid = required_param('notificationid', PARAM_INT);
-$redirecturl = optional_param('redirecturl', $CFG->wwwroot, PARAM_LOCALURL);
+
 $notification = $DB->get_record('notifications', array('id' => $notificationid));
+
+// If the redirect URL after filtering is empty, or it was never passed, then redirect to the notification page.
+if (!empty($notification->contexturl)) {
+    $redirecturl = new moodle_url($notification->contexturl);
+} else {
+    $redirecturl = new moodle_url('/message/output/popup/notifications.php', ['notificationid' => $notificationid]);
+}
 
 // Check notification belongs to this user.
 if ($USER->id != $notification->useridto) {

@@ -58,6 +58,9 @@ M.mod_quiz.timer = {
     // so we can cancel.
     timeoutid: null,
 
+    // Threshold for updating time remaining, in milliseconds.
+    threshold: 3000,
+
     /**
      * @param Y the YUI object
      * @param start, the timer starting time, in seconds.
@@ -130,6 +133,18 @@ M.mod_quiz.timer = {
 
         // Arrange for this method to be called again soon.
         M.mod_quiz.timer.timeoutid = setTimeout(M.mod_quiz.timer.update, 100);
+    },
+
+    // Allow the end time of the quiz to be updated.
+    updateEndTime: function(timeleft) {
+        var newtimeleft = new Date().getTime() + timeleft * 1000;
+
+        // Only update if change is greater than the threshold, so the
+        // time doesn't bounce around unnecessarily.
+        if (Math.abs(newtimeleft - M.mod_quiz.timer.endtime) > M.mod_quiz.timer.threshold) {
+            M.mod_quiz.timer.endtime = newtimeleft;
+            M.mod_quiz.timer.update();
+        }
     }
 };
 
@@ -179,9 +194,9 @@ M.mod_quiz.nav.init = function(Y) {
                 pageno = 0;
             }
 
-            var questionidmatch = this.get('href').match(/#q(\d+)/);
+            var questionidmatch = this.get('href').match(/#question-(\d+)-(\d+)/);
             if (questionidmatch) {
-                form.set('action', form.get('action') + '#q' + questionidmatch[1]);
+                form.set('action', form.get('action') + questionidmatch[0]);
             }
 
             nav_to_page(pageno);

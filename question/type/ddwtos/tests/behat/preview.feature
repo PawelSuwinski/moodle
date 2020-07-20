@@ -22,15 +22,15 @@ Feature: Preview a drag-drop into text question
       | Test questions   | ddwtos | Drag to text | fox      |
     Given I log in as "teacher1"
     And I am on "Course 1" course homepage
-    And I navigate to "Question bank" node in "Course administration"
+    And I navigate to "Question bank" in current page administration
 
   @javascript @_bug_phantomjs
   Scenario: Preview a question using the mouse.
-    When I click on "Preview" "link" in the "Drag to text" "table_row"
+    When I choose "Preview" action for "Drag to text" in the question bank
     And I switch to "questionpreview" window
     # Increase window size and wait 2 seconds to ensure elements are placed properly by js.
     # Keep window large else drag will scroll the window to find element.
-    And I change window size to "large"
+    And I change window size to "medium"
     And I wait "2" seconds
     And I drag "quick" to space "1" in the drag and drop into text question
     And I drag "fox" to space "2" in the drag and drop into text question
@@ -42,7 +42,7 @@ Feature: Preview a drag-drop into text question
 
   @javascript
   Scenario: Preview a question using the keyboard & submit incomplete.
-    When I click on "Preview" "link" in the "Drag to text" "table_row"
+    When I choose "Preview" action for "Drag to text" in the question bank
     And I switch to "questionpreview" window
     And I type " " into space "1" in the drag and drop onto image question
     And I type "   " into space "2" in the drag and drop onto image question
@@ -54,7 +54,7 @@ Feature: Preview a drag-drop into text question
 
   @javascript
   Scenario: Preview a question using the keyboard.
-    When I click on "Preview" "link" in the "Drag to text" "table_row"
+    When I choose "Preview" action for "Drag to text" in the question bank
     And I switch to "questionpreview" window
     And I type "  " into space "1" in the drag and drop onto image question
     And I type "  " into space "2" in the drag and drop onto image question
@@ -62,4 +62,20 @@ Feature: Preview a drag-drop into text question
     And I press "Submit and finish"
     Then the state of "The" question is shown as "Incorrect"
     And I should see "Mark 0.00 out of 1.00"
+    And I switch to the main window
+
+  @javascript
+  Scenario: Preview a question that uses strange group numbers using the keyboard.
+    Given the following "questions" exist:
+      | questioncategory | qtype  | name         | template  |
+      | Test questions   | ddwtos | Funny groups | oddgroups |
+    And I reload the page
+    When I choose "Preview" action for "Funny groups" in the question bank
+    And I switch to "questionpreview" window
+    And I type " " into space "1" in the drag and drop onto image question
+    And I type " " into space "2" in the drag and drop onto image question
+    And I type " " into space "3" in the drag and drop onto image question
+    And I press "Submit and finish"
+    Then the state of "The" question is shown as "Correct"
+    And I should see "Mark 1.00 out of 1.00"
     And I switch to the main window

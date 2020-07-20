@@ -96,7 +96,8 @@ abstract class core_filetypes {
             'flv' => array('type' => 'video/x-flv', 'icon' => 'flash',
                     'groups' => array('video', 'web_video'), 'string' => 'video'),
             'f4v' => array('type' => 'video/mp4', 'icon' => 'flash', 'groups' => array('video', 'web_video'), 'string' => 'video'),
-
+            'fmp4' => array('type' => 'video/mp4', 'icon' => 'mpeg', 'groups' => array('html_video', 'video', 'web_video'),
+                    'string' => 'video'),
             'gallery' => array('type' => 'application/x-smarttech-notebook', 'icon' => 'archive'),
             'galleryitem' => array('type' => 'application/x-smarttech-notebook', 'icon' => 'archive'),
             'gallerycollection' => array('type' => 'application/x-smarttech-notebook', 'icon' => 'archive'),
@@ -114,6 +115,7 @@ abstract class core_filetypes {
             'gzip' => array('type' => 'application/g-zip', 'icon' => 'archive',
                     'groups' => array('archive'), 'string' => 'archive'),
             'h' => array('type' => 'text/plain', 'icon' => 'sourcecode'),
+            'h5p' => array('type' => 'application/zip.h5p', 'icon' => 'h5p', 'string' => 'archive'),
             'hpp' => array('type' => 'text/plain', 'icon' => 'sourcecode'),
             'hqx' => array('type' => 'application/mac-binhex40', 'icon' => 'archive',
                     'groups' => array('archive'), 'string' => 'archive'),
@@ -152,6 +154,7 @@ abstract class core_filetypes {
             'mw' => array('type' => 'application/maple', 'icon' => 'math'),
             'mws' => array('type' => 'application/maple', 'icon' => 'math'),
             'm3u' => array('type' => 'audio/x-mpegurl', 'icon' => 'mp3', 'groups' => array('audio'), 'string' => 'audio'),
+            'm3u8' => array('type' => 'application/x-mpegURL', 'icon' => 'mpeg', 'groups' => array('media_source')),
             'mp3' => array('type' => 'audio/mp3', 'icon' => 'mp3', 'groups' => array('audio', 'html_audio', 'web_audio'),
                     'string' => 'audio'),
             'mp4' => array('type' => 'video/mp4', 'icon' => 'mpeg', 'groups' => array('html_video', 'video', 'web_video'),
@@ -162,6 +165,7 @@ abstract class core_filetypes {
                     'string' => 'audio'),
             'mpeg' => array('type' => 'video/mpeg', 'icon' => 'mpeg', 'groups' => array('video', 'web_video'),
                     'string' => 'video'),
+            'mpd' => array('type' => 'application/dash+xml', 'icon' => 'mpeg', 'groups' => array('media_source')),
             'mpe' => array('type' => 'video/mpeg', 'icon' => 'mpeg', 'groups' => array('video', 'web_video'),
                     'string' => 'video'),
             'mpg' => array('type' => 'video/mpeg', 'icon' => 'mpeg', 'groups' => array('video', 'web_video'),
@@ -272,6 +276,8 @@ abstract class core_filetypes {
             'tex' => array('type' => 'application/x-tex', 'icon' => 'text'),
             'texi' => array('type' => 'application/x-texinfo', 'icon' => 'text'),
             'texinfo' => array('type' => 'application/x-texinfo', 'icon' => 'text'),
+            'ts' => array('type' => 'video/MP2T', 'icon' => 'mpeg', 'groups' => array('video', 'web_video'),
+                    'string' => 'video'),
             'tsv' => array('type' => 'text/tab-separated-values', 'icon' => 'text'),
             'txt' => array('type' => 'text/plain', 'icon' => 'text', 'defaulticon' => true),
             'vtt' => array('type' => 'text/vtt', 'icon' => 'text', 'groups' => array('html_track')),
@@ -337,16 +343,13 @@ abstract class core_filetypes {
         // Get defaults.
         $mimetypes = self::get_default_types();
 
-        // If there are no custom types, just return.
+        // Get custom file types.
         $custom = self::get_custom_types();
-        if (empty($custom)) {
-            return $mimetypes;
-        }
 
         // Check value is an array.
         if (!is_array($custom)) {
             debugging('Invalid $CFG->customfiletypes (not array)', DEBUG_DEVELOPER);
-            return $mimetypes;
+            $custom = array();
         }
 
         foreach ($custom as $customentry) {

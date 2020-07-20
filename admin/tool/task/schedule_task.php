@@ -44,9 +44,8 @@ function tool_task_mtrace_wrapper($message, $eol) {
 $taskname = required_param('task', PARAM_RAW_TRIMMED);
 
 // Basic security checks.
-require_login();
+require_admin();
 $context = context_system::instance();
-require_capability('moodle/site:config', $context);
 
 if (!get_config('tool_task', 'enablerunnow')) {
     print_error('nopermissions', 'error', '', get_string('runnow', 'tool_task'));
@@ -72,9 +71,10 @@ echo $OUTPUT->heading($task->get_name());
 if (!optional_param('confirm', 0, PARAM_INT)) {
     echo $OUTPUT->confirm(get_string('runnow_confirm', 'tool_task', $task->get_name()),
             new single_button(new moodle_url('/admin/tool/task/schedule_task.php',
-            array('task' => $taskname, 'confirm' => 1, 'sesskey' => sesskey())),
+                    ['task' => $taskname, 'confirm' => 1, 'sesskey' => sesskey()]),
             get_string('runnow', 'tool_task')),
-            new single_button(new moodle_url('/admin/tool/task/scheduledtasks.php'),
+            new single_button(new moodle_url('/admin/tool/task/scheduledtasks.php',
+                    ['lastchanged' => get_class($task)]),
             get_string('cancel'), false));
     echo $OUTPUT->footer();
     exit;
@@ -88,10 +88,16 @@ echo html_writer::start_tag('pre');
 $CFG->mtrace_wrapper = 'tool_task_mtrace_wrapper';
 
 // Run the specified task (this will output an error if it doesn't exist).
-cron_run_single_task($task);
+\core\task\manager::run_from_cli($task);
+
 echo html_writer::end_tag('pre');
 
 $output = $PAGE->get_renderer('tool_task');
-echo $output->link_back();
+
+// Re-run the specified task (this will output an error if it doesn't exist).
+echo $OUTPUT->single_button(new moodle_url('/admin/tool/task/schedule_task.php',
+        array('task' => $taskname, 'confirm' => 1, 'sesskey' => sesskey())),
+        get_string('runagain', 'tool_task'));
+echo $output->link_back(get_class($task));
 
 echo $OUTPUT->footer();

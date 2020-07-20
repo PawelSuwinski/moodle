@@ -26,6 +26,7 @@ namespace tool_dataprivacy\task;
 
 use action_link;
 use coding_exception;
+use context_system;
 use core\message\message;
 use core\task\adhoc_task;
 use core_user;
@@ -74,22 +75,42 @@ class process_data_request_task extends adhoc_task {
             return;
         }
 
+        if (!\tool_dataprivacy\data_registry::defaults_set()) {
+            // Warn if no site purpose is defined.
+            mtrace('Warning: No purpose is defined at the system level. Deletion will delete all.');
+        }
+
+        // Grab the manager.
+        // We set an observer against it to handle failures.
+        $manager = new \core_privacy\manager();
+        $manager->set_observer(new \tool_dataprivacy\manager_observer());
+
         // Get the user details now. We might not be able to retrieve it later if it's a deletion processing.
         $foruser = core_user::get_user($request->userid);
-        $usercontext = \context_user::instance($foruser->id);
 
         // Update the status of this request as pre-processing.
-        mtrace('Processing request...');
+        mtrace('Pre-processing request...');
         api::update_request_status($requestid, api::DATAREQUEST_STATUS_PROCESSING);
+        $contextlistcollection = $manager->get_contexts_for_userid($requestpersistent->get('userid'));
+
+        mtrace('Fetching approved contextlists from collection');
+        $approvedclcollection = api::get_approved_contextlist_collection_for_collection(
+                $contextlistcollection, $foruser, $request->type);
+
+        mtrace('Processing request...');
+        $completestatus = api::DATAREQUEST_STATUS_COMPLETE;
+        $deleteuser = false;
 
         if ($request->type == api::DATAREQUEST_TYPE_EXPORT) {
-            // Get the collection of approved_contextlist objects needed for core_privacy data export.
-            $approvedclcollection = api::get_approved_contextlist_collection_for_request($requestpersistent);
+            // Get the user context.
+            $usercontext = \context_user::instance($foruser->id, IGNORE_MISSING);
+            if (!$usercontext) {
+                mtrace("Request {$requestid} cannot be processed due to a missing user context instance for the user
+                    with ID {$foruser->id}. Skipping...");
+                return;
+            }
 
             // Export the data.
-            $manager = new \core_privacy\manager();
-            $manager->set_observer(new \tool_dataprivacy\manager_observer());
-
             $exportedcontent = $manager->export_user_data($approvedclcollection);
 
             $fs = get_file_storage();
@@ -105,31 +126,40 @@ class process_data_request_task extends adhoc_task {
             $filerecord->author    = fullname($foruser);
             // Save somewhere.
             $thing = $fs->create_file_from_pathname($filerecord, $exportedcontent);
-
+            $completestatus = api::DATAREQUEST_STATUS_DOWNLOAD_READY;
         } else if ($request->type == api::DATAREQUEST_TYPE_DELETE) {
-            // Get the collection of approved_contextlist objects needed for core_privacy data deletion.
-            $approvedclcollection = api::get_approved_contextlist_collection_for_request($requestpersistent);
+            // Delete the data for users other than the primary admin, which is rejected.
+            if (is_primary_admin($foruser->id)) {
+                $completestatus = api::DATAREQUEST_STATUS_REJECTED;
+            } else {
+                $manager = new \core_privacy\manager();
+                $manager->set_observer(new \tool_dataprivacy\manager_observer());
 
-            // Delete the data.
-            $manager = new \core_privacy\manager();
-            $manager->set_observer(new \tool_dataprivacy\manager_observer());
-
-            $manager->delete_data_for_user($approvedclcollection);
+                $manager->delete_data_for_user($approvedclcollection);
+                $completestatus = api::DATAREQUEST_STATUS_DELETED;
+                $deleteuser = !$foruser->deleted;
+            }
         }
 
         // When the preparation of the metadata finishes, update the request status to awaiting approval.
-        api::update_request_status($requestid, api::DATAREQUEST_STATUS_COMPLETE);
+        api::update_request_status($requestid, $completestatus);
         mtrace('The processing of the user data request has been completed...');
 
         // Create message to notify the user regarding the processing results.
-        $dpo = core_user::get_user($request->dpo);
         $message = new message();
         $message->courseid = $SITE->id;
         $message->component = 'tool_dataprivacy';
         $message->name = 'datarequestprocessingresults';
-        $message->userfrom = $dpo;
-        $message->replyto = $dpo->email;
-        $message->replytoname = fullname($dpo->email);
+        if (empty($request->dpo)) {
+            // Use the no-reply user as the sender if the privacy officer is not set. This is the case for automatically
+            // approved requests.
+            $fromuser = core_user::get_noreply_user();
+        } else {
+            $fromuser = core_user::get_user($request->dpo);
+            $message->replyto = $fromuser->email;
+            $message->replytoname = fullname($fromuser);
+        }
+        $message->userfrom = $fromuser;
 
         $typetext = null;
         // Prepare the context data for the email message body.
@@ -139,8 +169,17 @@ class process_data_request_task extends adhoc_task {
 
         $output = $PAGE->get_renderer('tool_dataprivacy');
         $emailonly = false;
+        $notifyuser = true;
         switch ($request->type) {
             case api::DATAREQUEST_TYPE_EXPORT:
+                // Check if the user is allowed to download their own export. (This is for
+                // institutions which centrally co-ordinate subject access request across many
+                // systems, not just one Moodle instance, so we don't want every instance emailing
+                // the user.)
+                if (!api::can_download_data_request_for_user($request->userid, $request->requestedby, $request->userid)) {
+                    $notifyuser = false;
+                }
+
                 $typetext = get_string('requesttypeexport', 'tool_dataprivacy');
                 // We want to notify the user in Moodle about the processing results.
                 $message->notification = 1;
@@ -148,7 +187,8 @@ class process_data_request_task extends adhoc_task {
                 $message->contexturl = $datarequestsurl;
                 $message->contexturlname = get_string('datarequests', 'tool_dataprivacy');
                 // Message to the recipient.
-                $messagetextdata['message'] = get_string('resultdownloadready', 'tool_dataprivacy', $SITE->fullname);
+                $messagetextdata['message'] = get_string('resultdownloadready', 'tool_dataprivacy',
+                    format_string($SITE->fullname, true, ['context' => context_system::instance()]));
                 // Prepare download link.
                 $downloadurl = moodle_url::make_pluginfile_url($usercontext->id, 'tool_dataprivacy', 'export', $thing->get_itemid(),
                     $thing->get_filepath(), $thing->get_filename(), true);
@@ -160,7 +200,8 @@ class process_data_request_task extends adhoc_task {
                 // No point notifying a deleted user in Moodle.
                 $message->notification = 0;
                 // Message to the recipient.
-                $messagetextdata['message'] = get_string('resultdeleted', 'tool_dataprivacy', $SITE->fullname);
+                $messagetextdata['message'] = get_string('resultdeleted', 'tool_dataprivacy',
+                    format_string($SITE->fullname, true, ['context' => context_system::instance()]));
                 // Message will be sent to the deleted user via email only.
                 $emailonly = true;
                 break;
@@ -179,18 +220,47 @@ class process_data_request_task extends adhoc_task {
         $message->fullmessagehtml = $messagehtml;
 
         // Send message to the user involved.
-        if ($emailonly) {
-            email_to_user($foruser, $dpo, $subject, $message->fullmessage, $messagehtml);
-        } else {
-            message_send($message);
-        }
-        mtrace('Message sent to user: ' . $messagetextdata['username']);
+        if ($notifyuser) {
+            $messagesent = false;
+            if ($emailonly) {
+                // Do not sent an email if the user has been deleted. The user email has been previously deleted.
+                if (!$foruser->deleted) {
+                    $messagesent = email_to_user($foruser, $fromuser, $subject, $message->fullmessage, $messagehtml);
+                }
+            } else {
+                $messagesent = message_send($message);
+            }
 
-        // Send to requester as well if this request was made on behalf of another user who's not a DPO,
-        // and has the capability to make data requests for the user (e.g. Parent).
-        if (!api::is_site_dpo($request->requestedby) && $foruser->id != $request->requestedby) {
+            if ($messagesent) {
+                mtrace('Message sent to user: ' . $messagetextdata['username']);
+            }
+        }
+
+        // Send to requester as well in some circumstances.
+        if ($foruser->id != $request->requestedby) {
+            $sendtorequester = false;
+            switch ($request->type) {
+                case api::DATAREQUEST_TYPE_EXPORT:
+                    // Send to the requester as well if they can download it, unless they are the
+                    // DPO. If we didn't notify the user themselves (because they can't download)
+                    // then send to requester even if it is the DPO, as in that case the requester
+                    // needs to take some action.
+                    if (api::can_download_data_request_for_user($request->userid, $request->requestedby, $request->requestedby)) {
+                        $sendtorequester = !$notifyuser || !api::is_site_dpo($request->requestedby);
+                    }
+                    break;
+                case api::DATAREQUEST_TYPE_DELETE:
+                    // Send to the requester if they are not the DPO and if they are allowed to
+                    // create data requests for the user (e.g. Parent).
+                    $sendtorequester = !api::is_site_dpo($request->requestedby) &&
+                            api::can_create_data_request_for_user($request->userid, $request->requestedby);
+                    break;
+                default:
+                    throw new moodle_exception('errorinvalidrequesttype', 'tool_dataprivacy');
+            }
+
             // Ensure the requester has the capability to make data requests for this user.
-            if (api::can_create_data_request_for_user($request->userid, $request->requestedby)) {
+            if ($sendtorequester) {
                 $requestedby = core_user::get_user($request->requestedby);
                 $message->userto = $requestedby;
                 $messagetextdata['username'] = fullname($requestedby);
@@ -201,7 +271,7 @@ class process_data_request_task extends adhoc_task {
 
                 // Send message.
                 if ($emailonly) {
-                    email_to_user($requestedby, $dpo, $subject, $message->fullmessage, $messagehtml);
+                    email_to_user($requestedby, $fromuser, $subject, $message->fullmessage, $messagehtml);
                 } else {
                     message_send($message);
                 }
@@ -209,7 +279,7 @@ class process_data_request_task extends adhoc_task {
             }
         }
 
-        if ($request->type == api::DATAREQUEST_TYPE_DELETE) {
+        if ($deleteuser) {
             // Delete the user.
             delete_user($foruser);
         }

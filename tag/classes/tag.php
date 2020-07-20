@@ -648,7 +648,8 @@ class core_tag_tag {
      * @param int[] $itemids
      * @param int $standardonly wether to return only standard tags or any
      * @param int $tiuserid tag instance user id, only needed for tag areas with user tagging
-     * @return core_tag_tag[] each object contains additional fields taginstanceid, taginstancecontextid and ordering
+     * @return core_tag_tag[][] first array key is itemid. For each itemid,
+     *      an array tagid => tag object with additional fields taginstanceid, taginstancecontextid and ordering
      */
     public static function get_items_tags($component, $itemtype, $itemids, $standardonly = self::BOTH_STANDARD_AND_NOT,
             $tiuserid = 0) {
@@ -907,7 +908,7 @@ class core_tag_tag {
         }
 
         $ordering = $DB->get_field_sql('SELECT MAX(ordering) FROM {tag_instance} ti
-                WHERE ti.itemtype = :itemtype AND ti.itemid = itemid AND
+                WHERE ti.itemtype = :itemtype AND ti.itemid = :itemid AND
                 ti.component = :component' . $usersql, $params);
 
         return $tag->add_instance($component, $itemtype, $itemid, $context, $ordering + 1, $tiuserid);

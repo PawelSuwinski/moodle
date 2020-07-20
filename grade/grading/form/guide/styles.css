@@ -237,3 +237,12 @@
     margin: 0;
     width: auto;
 }
+.gradingform_guide_comment_chooser {
+    max-height: 80vh;
+    overflow-y: auto;
+}
+.gradingform_guide-frequent-comments {
+    position: absolute;
+    top: 7px;
+    right: 0;
+}

@@ -105,7 +105,8 @@ define(
             new FormField('secureicon', FormField.TYPES.TEXT, true, ''),
             new FormField('launchcontainer', FormField.TYPES.SELECT, true, 0),
             new FormField('grade_modgrade_point', FormField.TYPES.TEXT, false, ''),
-            new FormField('cmidnumber', FormField.TYPES.TEXT, true, '')
+            new FormField('lineitemresourceid', FormField.TYPES.TEXT, true, ''),
+            new FormField('lineitemtag', FormField.TYPES.TEXT, true, '')
         ];
 
         /**
@@ -123,7 +124,7 @@ define(
             for (index in ltiFormFields) {
                 var field = ltiFormFields[index];
                 var value = null;
-                if ($.type(returnData[field.name]) !== 'undefined') {
+                if (typeof returnData[field.name] !== 'undefined') {
                     value = returnData[field.name];
                 }
                 field.setFieldValue(value);

@@ -32,6 +32,7 @@ require_once($CFG->dirroot.'/enrol/locallib.php');
 require_once($CFG->dirroot.'/group/lib.php');
 require_once($CFG->dirroot.'/enrol/manual/locallib.php');
 require_once($CFG->dirroot.'/cohort/lib.php');
+require_once($CFG->dirroot . '/enrol/manual/classes/enrol_users_form.php');
 
 $id      = required_param('id', PARAM_INT); // Course id.
 $action  = required_param('action', PARAM_ALPHANUMEXT);
@@ -57,6 +58,7 @@ $outcome = new stdClass();
 $outcome->success = true;
 $outcome->response = new stdClass();
 $outcome->error = '';
+$outcome->count = 0;
 
 $searchanywhere = get_user_preferences('userselector_searchanywhere', false);
 
@@ -94,9 +96,17 @@ switch ($action) {
         $duration = optional_param('duration', 0, PARAM_INT);
         $startdate = optional_param('startdate', 0, PARAM_INT);
         $recovergrades = optional_param('recovergrades', 0, PARAM_INT);
+        $timeend = optional_param_array('timeend', [], PARAM_INT);
 
         if (empty($roleid)) {
             $roleid = null;
+        } else {
+            if (!has_capability('moodle/role:assign', $context)) {
+                throw new enrol_ajax_exception('assignnotpermitted');
+            }
+            if (!array_key_exists($roleid, get_assignable_roles($context, ROLENAME_ALIAS, false))) {
+                throw new enrol_ajax_exception('invalidrole');
+            }
         }
 
         if (empty($startdate)) {
@@ -122,10 +132,23 @@ switch ($action) {
                 $timestart = $today;
                 break;
         }
-        if ($duration <= 0) {
+        if ($timeend) {
+            $timeend = make_timestamp($timeend['year'], $timeend['month'], $timeend['day'], $timeend['hour'], $timeend['minute']);
+        } else if ($duration <= 0) {
             $timeend = 0;
         } else {
             $timeend = $timestart + $duration;
+        }
+
+        $mform = new enrol_manual_enrol_users_form(null, (object)["context" => $context]);
+        $userenroldata = [
+                'startdate' => $timestart,
+                'timeend' => $timeend,
+        ];
+        $mform->set_data($userenroldata);
+        $validationerrors = $mform->validation($userenroldata, null);
+        if (!empty($validationerrors)) {
+            throw new enrol_ajax_exception('invalidenrolduration');
         }
 
         $instances = $manager->get_enrolment_instances();
@@ -142,8 +165,10 @@ switch ($action) {
             foreach ($users as $user) {
                 $plugin->enrol_user($instance, $user->id, $roleid, $timestart, $timeend, null, $recovergrades);
             }
+            $outcome->count += count($users);
             foreach ($cohorts as $cohort) {
-                $plugin->enrol_cohort($instance, $cohort->id, $roleid, $timestart, $timeend, null, $recovergrades);
+                $totalenrolledusers = $plugin->enrol_cohort($instance, $cohort->id, $roleid, $timestart, $timeend, null, $recovergrades);
+                $outcome->count += $totalenrolledusers;
             }
         } else {
             throw new enrol_ajax_exception('enrolnotpermitted');

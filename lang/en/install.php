@@ -46,9 +46,9 @@ $string['clialreadyconfigured'] = 'The configuration file config.php already exi
 $string['clialreadyinstalled'] = 'The configuration file config.php already exists. Please use admin/cli/install_database.php to upgrade Moodle for this site.';
 $string['cliinstallfinished'] = 'Installation completed successfully.';
 $string['cliinstallheader'] = 'Moodle {$a} command line installation program';
-$string['climustagreelicense'] = 'In non interactive mode you must agree to license by specifying --agree-license option';
+$string['climustagreelicense'] = 'In non-interactive mode you must agree to the licence by specifying --agree-license option';
 $string['cliskipdatabase'] = 'Skipping database installation.';
-$string['clitablesexist'] = 'Database tables already present, cli installation can not continue.';
+$string['clitablesexist'] = 'Database tables already present; CLI installation cannot continue.';
 $string['compatibilitysettings'] = 'Checking your PHP settings ...';
 $string['compatibilitysettingshead'] = 'Checking your PHP settings ...';
 $string['compatibilitysettingssub'] = 'Your server should pass all these tests to make Moodle run properly';
@@ -144,6 +144,7 @@ $string['inputdatadirectory'] = 'Data directory:';
 $string['inputwebadress'] = 'Web address :';
 $string['inputwebdirectory'] = 'Moodle directory:';
 $string['installation'] = 'Installation';
+$string['invaliddbprefix'] = 'Invalid prefix. The prefix can only consist of lower case letters and underscore.';
 $string['langdownloaderror'] = 'Unfortunately the language "{$a}" could not be downloaded. The installation process will continue in English.';
 $string['langdownloadok'] = 'The language "{$a}" was installed successfully. The installation process will continue in this language.';
 $string['memorylimit'] = 'Memory limit';
@@ -168,6 +169,12 @@ $string['memorylimithelp'] = '<p>The PHP memory limit for your server is current
     (you will see errors when you look at pages) so you\'ll have to remove the .htaccess file.</p></li>
 </ol>';
 $string['mysqliextensionisnotpresentinphp'] = 'PHP has not been properly configured with the MySQLi extension for it to communicate with MySQL. Please check your php.ini file or recompile PHP.';
+$string['nativeauroramysql'] = 'Aurora MySQL (native/auroramysql)';
+$string['nativeauroramysqlhelp'] = '<p>The database is where most of the Moodle settings and data are stored and must be configured here.</p>
+<p>The database name, username, and password are required fields; table prefix is optional.</p>
+<p>The database name may contain only alphanumeric characters, dollar ($) and underscore (_).</p>
+<p>If the database currently does not exist, and the user you specify has permission, Moodle will attempt to create a new database with the correct permissions and settings.</p>
+<p>This driver is not compatible with legacy MyISAM engine.</p>';
 $string['nativemariadb'] = 'MariaDB (native/mariadb)';
 $string['nativemariadbhelp'] = '<p>The database is where most of the Moodle settings and data are stored and must be configured here.</p>
 <p>The database name, username, and password are required fields; table prefix is optional.</p>
@@ -240,14 +247,10 @@ $string['welcomep20'] = 'You are seeing this page because you have successfully 
 $string['welcomep30'] = 'This release of the <strong>{$a->installername}</strong> includes the applications
     to create an environment in which <strong>Moodle</strong> will operate, namely:';
 $string['welcomep40'] = 'The package also includes <strong>Moodle {$a->moodlerelease} ({$a->moodleversion})</strong>.';
-$string['welcomep50'] = 'The use of all the applications in this package is governed by their respective
-    licences. The complete <strong>{$a->installername}</strong> package is
-    <a href="http://www.opensource.org/docs/definition_plain.html">open source</a> and is distributed
-    under the <a href="http://www.gnu.org/copyleft/gpl.html">GPL</a> license.';
+$string['welcomep50'] = 'The use of all the applications in this package is governed by their respective licences. The complete <strong>{$a->installername}</strong> package is <a href="https://www.opensource.org/docs/definition_plain.html">open source</a> and is distributed under the <a href="https://www.gnu.org/copyleft/gpl.html">GPL</a> license.';
 $string['welcomep60'] = 'The following pages will lead you through some easy to follow steps to
     configure and set up <strong>Moodle</strong> on your computer. You may accept the default
     settings or, optionally, amend them to suit your own needs.';
 $string['welcomep70'] = 'Click the "Next" button below to continue with the set up of <strong>Moodle</strong>.';
 $string['wwwroot'] = 'Web address';
 $string['wwwrooterror'] = 'The \'Web Address\' does not appear to be valid - this Moodle installation doesn\'t appear to be there. The value below has been reset.';
-// Deprecated since 3.4.

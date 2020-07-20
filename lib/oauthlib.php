@@ -108,7 +108,11 @@ class oauth_helper {
             $this->access_token_secret = $args['access_token_secret'];
         }
         $this->http = new curl(array('debug'=>false));
-        $this->http_options = array();
+        if (!empty($args['http_options'])) {
+            $this->http_options = $args['http_options'];
+        } else {
+            $this->http_options = array();
+        }
     }
 
     /**
@@ -396,7 +400,7 @@ abstract class oauth2_client extends curl {
     /** @var string $scope of the authentication request */
     protected $scope = '';
     /** @var stdClass $accesstoken access token object */
-    private $accesstoken = null;
+    protected $accesstoken = null;
     /** @var string $refreshtoken refresh token string */
     protected $refreshtoken = '';
     /** @var string $mocknextresponse string */

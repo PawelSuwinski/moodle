@@ -314,7 +314,20 @@ class tablelog extends \table_sql implements \renderable {
         if ($this->is_downloading()) {
             return $history->feedback;
         } else {
-            return format_text($history->feedback, $history->feedbackformat, array('context' => $this->context));
+            // We need the activity context, not the course context.
+            $gradeitem = $this->gradeitems[$history->itemid];
+            $context = $gradeitem->get_context();
+
+            $feedback = file_rewrite_pluginfile_urls(
+                $history->feedback,
+                'pluginfile.php',
+                $context->id,
+                GRADE_FILE_COMPONENT,
+                GRADE_HISTORY_FEEDBACK_FILEAREA,
+                $history->id
+            );
+
+            return format_text($feedback, $history->feedbackformat, array('context' => $context));
         }
     }
 
@@ -324,7 +337,7 @@ class tablelog extends \table_sql implements \renderable {
      * @return array containing sql to use and an array of params.
      */
     protected function get_filters_sql_and_params() {
-        global $DB;
+        global $DB, $USER;
 
         $coursecontext = $this->context;
         $filter = 'gi.courseid = :courseid';
@@ -353,6 +366,16 @@ class tablelog extends \table_sql implements \renderable {
         if (!empty($this->filters->grader)) {
             $filter .= " AND ggh.usermodified = :grader";
             $params += array('grader' => $this->filters->grader);
+        }
+
+        // If the course is separate group mode and the current user is not allowed to see all groups make sure
+        // that we display only users from the same groups as current user.
+        $groupmode = get_course($coursecontext->instanceid)->groupmode;
+        if ($groupmode == SEPARATEGROUPS && !has_capability('moodle/site:accessallgroups', $coursecontext)) {
+            $groupids = array_column(groups_get_all_groups($coursecontext->instanceid, $USER->id, 0, 'g.id'), 'id');
+            list($gsql, $gparams) = $DB->get_in_or_equal($groupids, SQL_PARAMS_NAMED, 'gmuparam', true, 0);
+            $filter .= " AND EXISTS (SELECT 1 FROM {groups_members} gmu WHERE gmu.userid=ggh.userid AND gmu.groupid $gsql)";
+            $params += $gparams;
         }
 
         return array($filter, $params);

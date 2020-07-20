@@ -141,7 +141,7 @@ class core_calendar_event_mapper_testcase extends advanced_testcase {
     protected function create_event($properties = []) {
         $record = new \stdClass();
         $record->name = 'event name';
-        $record->eventtype = 'global';
+        $record->eventtype = 'site';
         $record->timestart = time();
         $record->timeduration = 0;
         $record->timesort = 0;
@@ -254,6 +254,14 @@ class event_mapper_test_action_event implements action_event_interface {
             1729,
             true
         );
+    }
+
+    /**
+     * Component
+     * @return string|null
+     */
+    public function get_component() {
+        return $this->event->get_component();
     }
 }
 
@@ -373,6 +381,14 @@ class event_mapper_test_event implements event_interface {
 
     public function is_visible() {
         return true;
+    }
+
+    /**
+     * Component
+     * @return string|null
+     */
+    public function get_component() {
+        return null;
     }
 }
 

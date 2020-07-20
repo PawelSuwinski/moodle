@@ -301,6 +301,10 @@ function scorm_delete_instance($id) {
         }
         $DB->delete_records('scorm_scoes', array('scorm' => $scorm->id));
     }
+
+    scorm_grade_item_delete($scorm);
+
+    // We must delete the module record after we delete the grade item.
     if (! $DB->delete_records('scorm', array('id' => $scorm->id))) {
         $result = false;
     }
@@ -327,8 +331,6 @@ function scorm_delete_instance($id) {
         $result = false;
     }*/
 
-    scorm_grade_item_delete($scorm);
-
     return $result;
 }
 
@@ -352,16 +354,13 @@ function scorm_user_outline($course, $user, $mod, $scorm) {
     $grades = grade_get_grades($course->id, 'mod', 'scorm', $scorm->id, $user->id);
     if (!empty($grades->items[0]->grades)) {
         $grade = reset($grades->items[0]->grades);
-        $result = new stdClass();
-        $result->info = get_string('grade') . ': '. $grade->str_long_grade;
-
-        // Datesubmitted == time created. dategraded == time modified or time overridden
-        // if grade was last modified by the user themselves use date graded. Otherwise use date submitted.
-        // TODO: move this copied & pasted code somewhere in the grades API. See MDL-26704.
-        if ($grade->usermodified == $user->id || empty($grade->datesubmitted)) {
-            $result->time = $grade->dategraded;
+        $result = (object) [
+            'time' => grade_get_date_for_user_grade($grade, $user),
+        ];
+        if (!$grade->hidden || has_capability('moodle/grade:viewhidden', context_course::instance($course->id))) {
+            $result->info = get_string('grade') . ': '. $grade->str_long_grade;
         } else {
-            $result->time = $grade->datesubmitted;
+            $result->info = get_string('grade') . ': ' . get_string('hidden', 'grades');
         }
 
         return $result;
@@ -401,9 +400,13 @@ function scorm_user_complete($course, $user, $mod, $scorm) {
     $grades = grade_get_grades($course->id, 'mod', 'scorm', $scorm->id, $user->id);
     if (!empty($grades->items[0]->grades)) {
         $grade = reset($grades->items[0]->grades);
-        echo $OUTPUT->container(get_string('grade').': '.$grade->str_long_grade);
-        if ($grade->str_feedback) {
-            echo $OUTPUT->container(get_string('feedback').': '.$grade->str_feedback);
+        if (!$grade->hidden || has_capability('moodle/grade:viewhidden', context_course::instance($course->id))) {
+            echo $OUTPUT->container(get_string('grade').': '.$grade->str_long_grade);
+            if ($grade->str_feedback) {
+                echo $OUTPUT->container(get_string('feedback').': '.$grade->str_feedback);
+            }
+        } else {
+            echo $OUTPUT->container(get_string('grade') . ': ' . get_string('hidden', 'grades'));
         }
     }
 
@@ -843,15 +846,6 @@ function scorm_reset_userdata($data) {
 }
 
 /**
- * Returns all other caps used in module
- *
- * @return array
- */
-function scorm_get_extra_capabilities() {
-    return array('moodle/site:accessallgroups');
-}
-
-/**
  * Lists all file areas current user may browse
  *
  * @param object $course
@@ -1100,59 +1094,10 @@ function scorm_debug_log_remove($type, $scoid) {
 }
 
 /**
- * writes overview info for course_overview block - displays upcoming scorm objects that have a due date
- *
- * @deprecated since 3.3
- * @todo The final deprecation of this function will take place in Moodle 3.7 - see MDL-57487.
- * @param object $type - type of log(aicc,scorm12,scorm13) used as prefix for filename
- * @param array $htmlarray
- * @return mixed
+ * @deprecated since Moodle 3.3, when the block_course_overview block was removed.
  */
-function scorm_print_overview($courses, &$htmlarray) {
-    global $USER, $CFG;
-
-    debugging('The function scorm_print_overview() is now deprecated.', DEBUG_DEVELOPER);
-
-    if (empty($courses) || !is_array($courses) || count($courses) == 0) {
-        return array();
-    }
-
-    if (!$scorms = get_all_instances_in_courses('scorm', $courses)) {
-        return;
-    }
-
-    $strscorm   = get_string('modulename', 'scorm');
-    $strduedate = get_string('duedate', 'scorm');
-
-    foreach ($scorms as $scorm) {
-        $time = time();
-        $showattemptstatus = false;
-        if ($scorm->timeopen) {
-            $isopen = ($scorm->timeopen <= $time && $time <= $scorm->timeclose);
-        }
-        if ($scorm->displayattemptstatus == SCORM_DISPLAY_ATTEMPTSTATUS_ALL ||
-                $scorm->displayattemptstatus == SCORM_DISPLAY_ATTEMPTSTATUS_MY) {
-            $showattemptstatus = true;
-        }
-        if ($showattemptstatus || !empty($isopen) || !empty($scorm->timeclose)) {
-            $str = html_writer::start_div('scorm overview').html_writer::div($strscorm. ': '.
-                    html_writer::link($CFG->wwwroot.'/mod/scorm/view.php?id='.$scorm->coursemodule, $scorm->name,
-                                        array('title' => $strscorm, 'class' => $scorm->visible ? '' : 'dimmed')), 'name');
-            if ($scorm->timeclose) {
-                $str .= html_writer::div($strduedate.': '.userdate($scorm->timeclose), 'info');
-            }
-            if ($showattemptstatus) {
-                require_once($CFG->dirroot.'/mod/scorm/locallib.php');
-                $str .= html_writer::div(scorm_get_attempt_status($USER, $scorm), 'details');
-            }
-            $str .= html_writer::end_div();
-            if (empty($htmlarray[$scorm->course]['scorm'])) {
-                $htmlarray[$scorm->course]['scorm'] = $str;
-            } else {
-                $htmlarray[$scorm->course]['scorm'] .= $str;
-            }
-        }
-    }
+function scorm_print_overview() {
+    throw new coding_exception('scorm_print_overview() can not be used any more and is obsolete.');
 }
 
 /**
@@ -1453,9 +1398,18 @@ function scorm_check_mode($scorm, &$newattempt, &$attempt, $userid, &$mode) {
 
     if ($scorm->forcenewattempt == SCORM_FORCEATTEMPT_ALWAYS) {
         // This SCORM is configured to force a new attempt on every re-entry.
-        $attempt++;
         $newattempt = 'on';
         $mode = 'normal';
+        if ($attempt == 1) {
+            // Check if the user has any existing data or if this is really the first attempt.
+            $exists = $DB->record_exists('scorm_scoes_track', array('userid' => $userid, 'scormid' => $scorm->id));
+            if (!$exists) {
+                // No records yet - Attempt should == 1.
+                return;
+            }
+        }
+        $attempt++;
+
         return;
     }
     // Check if the scorm module is incomplete (used to validate user request to start a new attempt).
@@ -1679,18 +1633,31 @@ function scorm_refresh_events($courseid = 0, $instance = null, $cm = null) {
  *
  * @param calendar_event $event
  * @param \core_calendar\action_factory $factory
+ * @param int $userid User id override
  * @return \core_calendar\local\event\entities\action_interface|null
  */
 function mod_scorm_core_calendar_provide_event_action(calendar_event $event,
-                                                      \core_calendar\action_factory $factory) {
-    global $CFG;
+                                                      \core_calendar\action_factory $factory, $userid = null) {
+    global $CFG, $USER;
 
     require_once($CFG->dirroot . '/mod/scorm/locallib.php');
 
-    $cm = get_fast_modinfo($event->courseid)->instances['scorm'][$event->instance];
+    if (empty($userid)) {
+        $userid = $USER->id;
+    }
 
-    if (has_capability('mod/scorm:viewreport', $cm->context)) {
+    $cm = get_fast_modinfo($event->courseid, $userid)->instances['scorm'][$event->instance];
+
+    if (has_capability('mod/scorm:viewreport', $cm->context, $userid)) {
         // Teachers do not need to be reminded to complete a scorm.
+        return null;
+    }
+
+    $completion = new \completion_info($cm->get_course());
+
+    $completiondata = $completion->get_data($cm, false, $userid);
+
+    if ($completiondata->completionstate != COMPLETION_INCOMPLETE) {
         return null;
     }
 
@@ -1705,7 +1672,7 @@ function mod_scorm_core_calendar_provide_event_action(calendar_event $event,
     $scorm = (object)($customdata + ['timeclose' => 0, 'timeopen' => 0]);
 
     // Check that the SCORM activity is open.
-    list($actionable, $warnings) = scorm_get_availability_status($scorm);
+    list($actionable, $warnings) = scorm_get_availability_status($scorm, false, null, $userid);
 
     return $factory->create_instance(
         get_string('enter', 'scorm'),
@@ -1778,30 +1745,27 @@ function mod_scorm_get_completion_active_rule_descriptions($cm) {
     foreach ($cm->customdata['customcompletionrules'] as $key => $val) {
         switch ($key) {
             case 'completionstatusrequired':
-                if (is_null($val)) {
-                    continue;
-                }
-                // Determine the selected statuses using a bitwise operation.
-                $cvalues = array();
-                foreach (scorm_status_options(true) as $bit => $string) {
-                    if (($val & $bit) == $bit) {
-                        $cvalues[] = $string;
+                if (!is_null($val)) {
+                    // Determine the selected statuses using a bitwise operation.
+                    $cvalues = array();
+                    foreach (scorm_status_options(true) as $bit => $string) {
+                        if (($val & $bit) == $bit) {
+                            $cvalues[] = $string;
+                        }
                     }
+                    $statusstring = implode(', ', $cvalues);
+                    $descriptions[] = get_string('completionstatusrequireddesc', 'scorm', $statusstring);
                 }
-                $statusstring = implode(', ', $cvalues);
-                $descriptions[] = get_string('completionstatusrequireddesc', 'scorm', $statusstring);
                 break;
             case 'completionscorerequired':
-                if (is_null($val)) {
-                    continue;
+                if (!is_null($val)) {
+                    $descriptions[] = get_string('completionscorerequireddesc', 'scorm', $val);
                 }
-                $descriptions[] = get_string('completionscorerequireddesc', 'scorm', $val);
                 break;
             case 'completionstatusallscos':
-                if (empty($val)) {
-                    continue;
+                if (!empty($val)) {
+                    $descriptions[] = get_string('completionstatusallscos', 'scorm');
                 }
-                $descriptions[] = get_string('completionstatusallscos', 'scorm');
                 break;
             default:
                 break;
@@ -1922,4 +1886,28 @@ function mod_scorm_core_calendar_get_valid_event_timestart_range(\calendar_event
     }
 
     return [$mindate, $maxdate];
+}
+
+/**
+ * Given an array with a file path, it returns the itemid and the filepath for the defined filearea.
+ *
+ * @param  string $filearea The filearea.
+ * @param  array  $args The path (the part after the filearea and before the filename).
+ * @return array The itemid and the filepath inside the $args path, for the defined filearea.
+ */
+function mod_scorm_get_path_from_pluginfile(string $filearea, array $args) : array {
+    // SCORM never has an itemid (the number represents the revision but it's not stored in database).
+    array_shift($args);
+
+    // Get the filepath.
+    if (empty($args)) {
+        $filepath = '/';
+    } else {
+        $filepath = '/' . implode('/', $args) . '/';
+    }
+
+    return [
+        'itemid' => 0,
+        'filepath' => $filepath,
+    ];
 }

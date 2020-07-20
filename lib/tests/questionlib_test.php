@@ -54,18 +54,6 @@ class core_questionlib_testcase extends advanced_testcase {
     }
 
     /**
-     * Return true and false to test functions with feedback on and off.
-     *
-     * @return array Test data
-     */
-    public function provider_feedback() {
-        return array(
-            'Feedback test' => array(true),
-            'No feedback test' => array(false)
-        );
-    }
-
-    /**
      * Setup a course, a quiz, a question category and a question for testing.
      *
      * @param string $type The type of question category to create.
@@ -223,7 +211,7 @@ class core_questionlib_testcase extends advanced_testcase {
             'contextid' => $questioncat2->contextid)));
 
         // Now we want to test deleting the course category and moving the questions to another category.
-        question_delete_course_category($coursecat1, $coursecat2, false);
+        question_delete_course_category($coursecat1, $coursecat2);
 
         // Test that all tag_instances belong to one context.
         $this->assertEquals(8, $DB->count_records('tag_instance', array('component' => 'core_question',
@@ -274,6 +262,55 @@ class core_questionlib_testcase extends advanced_testcase {
     }
 
     /**
+     * Test that deleting a question from the question bank works in the normal case.
+     */
+    public function test_question_delete_question() {
+        global $DB;
+
+        // Setup.
+        $context = context_system::instance();
+        $qgen = $this->getDataGenerator()->get_plugin_generator('core_question');
+        $qcat = $qgen->create_question_category(array('contextid' => $context->id));
+        $q1 = $qgen->create_question('shortanswer', null, array('category' => $qcat->id));
+        $q2 = $qgen->create_question('shortanswer', null, array('category' => $qcat->id));
+
+        // Do.
+        question_delete_question($q1->id);
+
+        // Verify.
+        $this->assertFalse($DB->record_exists('question', ['id' => $q1->id]));
+        // Check that we did not delete too much.
+        $this->assertTrue($DB->record_exists('question', ['id' => $q2->id]));
+    }
+
+    /**
+     * Test that deleting a broken question from the question bank does not cause fatal errors.
+     */
+    public function test_question_delete_question_broken_data() {
+        global $DB;
+
+        // Setup.
+        $context = context_system::instance();
+        $qgen = $this->getDataGenerator()->get_plugin_generator('core_question');
+        $qcat = $qgen->create_question_category(array('contextid' => $context->id));
+        $q1 = $qgen->create_question('shortanswer', null, array('category' => $qcat->id));
+
+        // Now delete the category, to simulate what happens in old sites where
+        // referential integrity has failed.
+        $DB->delete_records('question_categories', ['id' => $qcat->id]);
+
+        // Do.
+        question_delete_question($q1->id);
+
+        // Verify.
+        $this->assertDebuggingCalled('Deleting question ' . $q1->id .
+                ' which is no longer linked to a context. Assuming system context ' .
+                'to avoid errors, but this may mean that some data like ' .
+                'files, tags, are not cleaned up.');
+        $this->assertFalse($DB->record_exists('question', ['id' => $q1->id]));
+    }
+
+    /**
      * This function tests the question_category_delete_safe function.
      */
     public function test_question_category_delete_safe() {
@@ -300,11 +337,8 @@ class core_questionlib_testcase extends advanced_testcase {
 
     /**
      * This function tests the question_delete_activity function.
-     *
-     * @param bool $feedback Whether to return feedback
-     * @dataProvider provider_feedback
      */
-    public function test_question_delete_activity($feedback) {
+    public function test_question_delete_activity() {
         global $DB;
         $this->resetAfterTest(true);
         $this->setAdminUser();
@@ -312,11 +346,9 @@ class core_questionlib_testcase extends advanced_testcase {
         list($category, $course, $quiz, $qcat, $questions) = $this->setup_quiz_and_questions();
 
         $cm = get_coursemodule_from_instance('quiz', $quiz->id);
-        // Test that the feedback works.
-        if ($feedback) {
-            $this->expectOutputRegex('|'.get_string('unusedcategorydeleted', 'question').'|');
-        }
-        question_delete_activity($cm, $feedback);
+
+        // Test the deletion.
+        question_delete_activity($cm);
 
         // Verify category deleted.
         $criteria = array('id' => $qcat->id);
@@ -347,31 +379,20 @@ class core_questionlib_testcase extends advanced_testcase {
         // Verify questions deleted or moved.
         $criteria = array('category' => $qcat->id);
         $this->assertEquals(0, $DB->count_records('question', $criteria));
-
-        // Test that the feedback works.
-        $expected[] = array('top', get_string('unusedcategorydeleted', 'question'));
-        $expected[] = array($qcat->name, get_string('unusedcategorydeleted', 'question'));
-        $this->assertEquals($expected, $result);
     }
 
     /**
      * This function tests the question_delete_course function.
-     *
-     * @param bool $feedback Whether to return feedback
-     * @dataProvider provider_feedback
      */
-    public function test_question_delete_course($feedback) {
+    public function test_question_delete_course() {
         global $DB;
         $this->resetAfterTest(true);
         $this->setAdminUser();
 
         list($category, $course, $quiz, $qcat, $questions) = $this->setup_quiz_and_questions('course');
 
-        // Test that the feedback works.
-        if ($feedback) {
-            $this->expectOutputRegex('|'.get_string('unusedcategorydeleted', 'question').'|');
-        }
-        question_delete_course($course, $feedback);
+        // Test the deletion.
+        question_delete_course($course);
 
         // Verify category deleted.
         $criteria = array('id' => $qcat->id);
@@ -384,11 +405,8 @@ class core_questionlib_testcase extends advanced_testcase {
 
     /**
      * This function tests the question_delete_course_category function.
-     *
-     * @param bool $feedback Whether to return feedback
-     * @dataProvider provider_feedback
      */
-    public function test_question_delete_course_category($feedback) {
+    public function test_question_delete_course_category() {
         global $DB;
         $this->resetAfterTest(true);
         $this->setAdminUser();
@@ -396,10 +414,7 @@ class core_questionlib_testcase extends advanced_testcase {
         list($category, $course, $quiz, $qcat, $questions) = $this->setup_quiz_and_questions('category');
 
         // Test that the feedback works.
-        if ($feedback) {
-            $this->expectOutputRegex('|'.get_string('unusedcategorydeleted', 'question').'|');
-        }
-        question_delete_course_category($category, 0, $feedback);
+        question_delete_course_category($category, null);
 
         // Verify category deleted.
         $criteria = array('id' => $qcat->id);
@@ -412,11 +427,8 @@ class core_questionlib_testcase extends advanced_testcase {
 
     /**
      * This function tests the question_delete_course_category function when it is supposed to move question categories.
-     *
-     * @param bool $feedback Whether to return feedback
-     * @dataProvider provider_feedback
      */
-    public function test_question_delete_course_category_move_qcats($feedback) {
+    public function test_question_delete_course_category_move_qcats() {
         global $DB;
         $this->resetAfterTest(true);
         $this->setAdminUser();
@@ -427,26 +439,19 @@ class core_questionlib_testcase extends advanced_testcase {
         $questionsinqcat1 = count($questions1);
         $questionsinqcat2 = count($questions2);
 
-        // Test that the feedback works.
-        if ($feedback) {
-            $a = new stdClass();
-            $a->oldplace = context::instance_by_id($qcat1->contextid)->get_context_name();
-            $a->newplace = context::instance_by_id($qcat2->contextid)->get_context_name();
-            $this->expectOutputRegex('|'.get_string('movedquestionsandcategories', 'question', $a).'|');
-        }
-        question_delete_course_category($category1, $category2, $feedback);
+        // Test the delete.
+        question_delete_course_category($category1, $category2);
 
         // Verify category not deleted.
         $criteria = array('id' => $qcat1->id);
         $this->assertEquals(1, $DB->count_records('question_categories', $criteria));
 
         // Verify questions are moved.
-        $criteria = array('category' => $qcat1->id);
         $params = array($qcat2->contextid);
         $actualquestionscount = $DB->count_records_sql("SELECT COUNT(*)
                                                           FROM {question} q
                                                           JOIN {question_categories} qc ON q.category = qc.id
-                                                         WHERE qc.contextid = ?", $params, $criteria);
+                                                         WHERE qc.contextid = ?", $params);
         $this->assertEquals($questionsinqcat1 + $questionsinqcat2, $actualquestionscount);
 
         // Verify there is just a single top-level category.
@@ -456,6 +461,60 @@ class core_questionlib_testcase extends advanced_testcase {
         // Verify there is no question category in previous context.
         $criteria = array('contextid' => $qcat1->contextid);
         $this->assertEquals(0, $DB->count_records('question_categories', $criteria));
+    }
+
+    /**
+     * This function tests the question_save_from_deletion function when it is supposed to make a new category and
+     * move question categories to that new category.
+     */
+    public function test_question_save_from_deletion() {
+        global $DB;
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+
+        list($category, $course, $quiz, $qcat, $questions) = $this->setup_quiz_and_questions();
+
+        $context = context::instance_by_id($qcat->contextid);
+
+        $newcat = question_save_from_deletion(array_column($questions, 'id'),
+                $context->get_parent_context()->id, $context->get_context_name());
+
+        // Verify that the newcat itself is not a tep level category.
+        $this->assertNotEquals(0, $newcat->parent);
+
+        // Verify there is just a single top-level category.
+        $this->assertEquals(1, $DB->count_records('question_categories', ['contextid' => $qcat->contextid, 'parent' => 0]));
+    }
+
+    /**
+     * This function tests the question_save_from_deletion function when it is supposed to make a new category and
+     * move question categories to that new category when quiz name is very long but less than 256 characters.
+     */
+    public function test_question_save_from_deletion_quiz_with_long_name() {
+        global $DB;
+        $this->resetAfterTest(true);
+        $this->setAdminUser();
+
+        list($category, $course, $quiz, $qcat, $questions) = $this->setup_quiz_and_questions();
+
+        // Moodle doesn't allow you to enter a name longer than 255 characters.
+        $quiz->name = shorten_text(str_repeat('123456789 ', 26), 255);
+
+        $DB->update_record('quiz', $quiz);
+
+        $context = context::instance_by_id($qcat->contextid);
+
+        $newcat = question_save_from_deletion(array_column($questions, 'id'),
+                $context->get_parent_context()->id, $context->get_context_name());
+
+        // Verifying that the inserted record's name is expected or not.
+        $this->assertEquals($DB->get_record('question_categories', ['id' => $newcat->id])->name, $newcat->name);
+
+        // Verify that the newcat itself is not a top level category.
+        $this->assertNotEquals(0, $newcat->parent);
+
+        // Verify there is just a single top-level category.
+        $this->assertEquals(1, $DB->count_records('question_categories', ['contextid' => $qcat->contextid, 'parent' => 0]));
     }
 
     public function test_question_remove_stale_questions_from_category() {
@@ -1621,6 +1680,37 @@ class core_questionlib_testcase extends advanced_testcase {
     }
 
     /**
+     * Tests that question_has_capability_on does not throw exception on broken questions.
+     */
+    public function test_question_has_capability_on_broken_question() {
+        global $DB;
+
+        // Create the test data.
+        $generator = $this->getDataGenerator();
+        $questiongenerator = $generator->get_plugin_generator('core_question');
+
+        $category = $generator->create_category();
+        $context = context_coursecat::instance($category->id);
+        $questioncat = $questiongenerator->create_question_category([
+            'contextid' => $context->id,
+        ]);
+
+        // Create a cloze question.
+        $question = $questiongenerator->create_question('multianswer', null, [
+            'category' => $questioncat->id,
+        ]);
+        // Now, break the question.
+        $DB->delete_records('question_multianswer', ['question' => $question->id]);
+
+        $this->setAdminUser();
+
+        $result = question_has_capability_on($question->id, 'tag');
+        $this->assertTrue($result);
+
+        $this->assertDebuggingCalled();
+    }
+
+    /**
      * Tests for the deprecated question_has_capability_on function when passing a stdClass as parameter.
      *
      * @dataProvider question_capability_on_question_provider
@@ -1646,7 +1736,6 @@ class core_questionlib_testcase extends advanced_testcase {
         foreach ($capabilities as $capname => $capvalue) {
             assign_capability($capname, $capvalue, $roleid, $context->id);
         }
-        $context->mark_dirty();
 
         $this->setUser($user);
 
@@ -1696,7 +1785,6 @@ class core_questionlib_testcase extends advanced_testcase {
         foreach ($capabilities as $capname => $capvalue) {
             assign_capability($capname, $capvalue, $roleid, $context->id);
         }
-        $context->mark_dirty();
 
         // Create the question.
         $qtype = 'truefalse';
@@ -1748,7 +1836,6 @@ class core_questionlib_testcase extends advanced_testcase {
         foreach ($capabilities as $capname => $capvalue) {
             assign_capability($capname, $capvalue, $roleid, $context->id);
         }
-        $context->mark_dirty();
 
         // Create the question.
         $qtype = 'truefalse';
@@ -1800,7 +1887,6 @@ class core_questionlib_testcase extends advanced_testcase {
         foreach ($capabilities as $capname => $capvalue) {
             assign_capability($capname, $capvalue, $roleid, $context->id);
         }
-        $context->mark_dirty();
 
         // Create the question.
         $qtype = 'truefalse';
@@ -1858,8 +1944,6 @@ class core_questionlib_testcase extends advanced_testcase {
         foreach ($capabilities as $capname => $capvalue) {
             assign_capability($capname, $capvalue, $roleid, $newcontext->id);
         }
-        $context->mark_dirty();
-        $newcontext->mark_dirty();
 
         // Create the question.
         $qtype = 'truefalse';
@@ -1915,7 +1999,6 @@ class core_questionlib_testcase extends advanced_testcase {
         foreach ($capabilities as $capname => $capvalue) {
             assign_capability($capname, $capvalue, $roleid, $context->id);
         }
-        $context->mark_dirty();
 
         // Create the question.
         $question = $questiongenerator->create_question('truefalse', null, [
@@ -1962,5 +2045,108 @@ class core_questionlib_testcase extends advanced_testcase {
         $this->expectException('coding_exception');
         $this->expectExceptionMessage('$questionorid parameter needs to be an integer or an object.');
         question_has_capability_on('one', 'tag');
+    }
+
+    /**
+     * Test of question_categorylist_parents function.
+     */
+    public function test_question_categorylist_parents() {
+        $this->resetAfterTest();
+        $generator = $this->getDataGenerator();
+        $questiongenerator = $generator->get_plugin_generator('core_question');
+        $category = $generator->create_category();
+        $context = context_coursecat::instance($category->id);
+        // Create a top category.
+        $cat0 = question_get_top_category($context->id, true);
+        // Add sub-categories.
+        $cat1 = $questiongenerator->create_question_category(['parent' => $cat0->id]);
+        $cat2 = $questiongenerator->create_question_category(['parent' => $cat1->id]);
+        // Test the 'get parents' function.
+        $parentcategories = question_categorylist_parents($cat2->id);
+        $this->assertEquals($cat0->id, $parentcategories[0]);
+        $this->assertEquals($cat1->id, $parentcategories[1]);
+        $this->assertCount(2, $parentcategories);
+    }
+
+    public function test_question_get_export_single_question_url() {
+        $generator = $this->getDataGenerator();
+
+        // Create a course and an activity.
+        $course = $generator->create_course();
+        $quiz = $generator->create_module('quiz', ['course' => $course->id]);
+
+        // Create a question in each place.
+        $questiongenerator = $generator->get_plugin_generator('core_question');
+        $courseqcat = $questiongenerator->create_question_category(['contextid' => context_course::instance($course->id)->id]);
+        $courseq = $questiongenerator->create_question('truefalse', null, ['category' => $courseqcat->id]);
+        $quizqcat = $questiongenerator->create_question_category(['contextid' => context_module::instance($quiz->cmid)->id]);
+        $quizq = $questiongenerator->create_question('truefalse', null, ['category' => $quizqcat->id]);
+        $systemqcat = $questiongenerator->create_question_category();
+        $systemq = $questiongenerator->create_question('truefalse', null, ['category' => $systemqcat->id]);
+
+        // Verify some URLs.
+        $this->assertEquals(new moodle_url('/question/exportone.php',
+                ['id' => $courseq->id, 'courseid' => $course->id, 'sesskey' => sesskey()]),
+                question_get_export_single_question_url(question_bank::load_question_data($courseq->id)));
+
+        $this->assertEquals(new moodle_url('/question/exportone.php',
+                ['id' => $quizq->id, 'cmid' => $quiz->cmid, 'sesskey' => sesskey()]),
+                question_get_export_single_question_url(question_bank::load_question($quizq->id)));
+
+        $this->assertEquals(new moodle_url('/question/exportone.php',
+                ['id' => $systemq->id, 'courseid' => SITEID, 'sesskey' => sesskey()]),
+                question_get_export_single_question_url(question_bank::load_question($systemq->id)));
+    }
+
+    /**
+     * Get test cases for test_core_question_find_next_unused_idnumber.
+     *
+     * @return array test cases.
+     */
+    public function find_next_unused_idnumber_cases(): array {
+        return [
+            ['id', null],
+            ['id1a', null],
+            ['id001', 'id002'],
+            ['id9', 'id10'],
+            ['id009', 'id010'],
+            ['id999', 'id1000'],
+            ['0', '1'],
+            ['-1', '-2'],
+            ['01', '02'],
+            ['09', '10'],
+            ['1.0E+29', '1.0E+30'], // Idnumbers are strings, not floats.
+            ['1.0E-29', '1.0E-30'], // By the way, this is not a sensible idnumber!
+            ['10.1', '10.2'],
+            ['10.9', '10.10'],
+
+        ];
+    }
+
+    /**
+     * Test core_question_find_next_unused_idnumber in the case when there are no other questions.
+     *
+     * @dataProvider find_next_unused_idnumber_cases
+     * @param string $oldidnumber value to pass to core_question_find_next_unused_idnumber.
+     * @param string|null $expectednewidnumber expected result.
+     */
+    public function test_core_question_find_next_unused_idnumber(string $oldidnumber, ?string $expectednewidnumber) {
+        $this->assertSame($expectednewidnumber, core_question_find_next_unused_idnumber($oldidnumber, 0));
+    }
+
+    public function test_core_question_find_next_unused_idnumber_skips_used() {
+        $this->resetAfterTest();
+
+        /** @var core_question_generator $generator */
+        $generator = $this->getDataGenerator()->get_plugin_generator('core_question');
+        $category = $generator->create_question_category();
+        $othercategory = $generator->create_question_category();
+        $generator->create_question('truefalse', null, ['category' => $category->id, 'idnumber' => 'id9']);
+        $generator->create_question('truefalse', null, ['category' => $category->id, 'idnumber' => 'id10']);
+        // Next one to make sure only idnumbers from the right category are ruled out.
+        $generator->create_question('truefalse', null, ['category' => $othercategory->id, 'idnumber' => 'id11']);
+
+        $this->assertSame('id11', core_question_find_next_unused_idnumber('id9', $category->id));
+        $this->assertSame('id11', core_question_find_next_unused_idnumber('id8', $category->id));
     }
 }

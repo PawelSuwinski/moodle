@@ -333,6 +333,14 @@ M.mod_quiz.autosave = {
         if (typeof window.tinyMCE !== 'undefined') {
             window.tinyMCE.triggerSave();
         }
+
+        // YUI io.form incorrectly (in my opinion) sends the value of all submit
+        // buttons in the ajax request. We don't want any submit buttons.
+        // Therefore, temporarily change the type.
+        // (Yes, this is a nasty hack. One day this will be re-written as AMD, hopefully).
+        var allsubmitbuttons = this.form.all('input[type=submit], button[type=submit]');
+        allsubmitbuttons.setAttribute('type', 'button');
+
         this.save_transaction = Y.io(this.AUTOSAVE_HANDLER, {
             method:  'POST',
             form:    {id: this.form},
@@ -342,14 +350,23 @@ M.mod_quiz.autosave = {
             },
             context: this
         });
+
+        // Change the button types back.
+        allsubmitbuttons.setAttribute('type', 'submit');
     },
 
     save_done: function(transactionid, response) {
-        if (response.responseText !== 'OK') {
+        var autosavedata = JSON.parse(response.responseText);
+        if (autosavedata.status !== 'OK') {
             // Because IIS is useless, Moodle can't send proper HTTP response
             // codes, so we have to detect failures manually.
             this.save_failed(transactionid, response);
             return;
+        }
+
+        if (typeof autosavedata.timeleft !== 'undefined') {
+            Y.log('Updating timer: ' + autosavedata.timeleft + ' seconds remain.', 'debug', 'moodle-mod_quiz-timer');
+            M.mod_quiz.timer.updateEndTime(autosavedata.timeleft);
         }
 
         Y.log('Save completed.', 'debug', 'moodle-mod_quiz-autosave');

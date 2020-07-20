@@ -31,7 +31,7 @@ defined('MOODLE_INTERNAL') || die();
  * @copyright 2016 Marina Glancy
  * @license http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
-class media_videojs_testcase extends advanced_testcase {
+class media_videojs_player_testcase extends advanced_testcase {
 
     /**
      * Pre-test setup. Preserves $CFG.
@@ -61,16 +61,15 @@ class media_videojs_testcase extends advanced_testcase {
      * Test method get_supported_extensions()
      */
     public function test_supported_extensions() {
-        $nativeextensions = array_merge(file_get_typegroup('extension', 'html_video'),
-            file_get_typegroup('extension', 'html_audio'));
+        $supportedextensions = array_merge(file_get_typegroup('extension', 'html_video'),
+            file_get_typegroup('extension', 'html_audio'), file_get_typegroup('extension', 'media_source'));
 
         set_config('useflash', 0, 'media_videojs');
 
         // Make sure that the list of extensions from the setting is filtered to HTML5 natively supported extensions.
         $player = new media_videojs_plugin();
-        $this->assertNotEmpty($player->get_supported_extensions());
         $this->assertTrue(in_array('.mp3', $player->get_supported_extensions()));
-        $this->assertEmpty(array_diff($player->get_supported_extensions(), $nativeextensions));
+        $this->assertEmpty(array_diff($player->get_supported_extensions(), $supportedextensions));
 
         // Try to set the audioextensions to something non-native (.ra) and make sure it is not returned as supported.
         set_config('audioextensions', '.mp3,.wav,.ra', 'media_videojs');
@@ -78,7 +77,7 @@ class media_videojs_testcase extends advanced_testcase {
         $this->assertNotEmpty($player->get_supported_extensions());
         $this->assertTrue(in_array('.mp3', $player->get_supported_extensions()));
         $this->assertFalse(in_array('.ra', $player->get_supported_extensions()));
-        $this->assertEmpty(array_diff($player->get_supported_extensions(), $nativeextensions));
+        $this->assertEmpty(array_diff($player->get_supported_extensions(), $supportedextensions));
 
         // Try to use flash extensions and make sure they are not returned as supported.
         set_config('videoextensions', '.flv,.f4v', 'media_videojs');
@@ -274,19 +273,6 @@ class media_videojs_testcase extends advanced_testcase {
         $this->youtube_plugin_engaged($t);
         $this->assertContains('list=PLxcO_MFWQBDcyn9xpbmx601YSDlDcTcr0', $t);
 
-        // Format: youtube video with start time.
-        $url = new moodle_url('https://www.youtube.com/watch?v=JNJMF1l3udM&t=1h11s');
-        $t = $manager->embed_url($url);
-        $this->youtube_plugin_engaged($t);
-        $this->assertContains('t=1h11s', $t);
-
-        // Format: youtube video within playlist with start time.
-        $url = new moodle_url('https://www.youtube.com/watch?v=dv2f_xfmbD8&index=4&list=PLxcO_MFWQBDcyn9xpbmx601YSDlDcTcr0&t=1m5s');
-        $t = $manager->embed_url($url);
-        $this->youtube_plugin_engaged($t);
-        $this->assertContains('list=PLxcO_MFWQBDcyn9xpbmx601YSDlDcTcr0', $t);
-        $this->assertContains('t=1m5s', $t);
-
         // Format: youtube playlist - not supported.
         $url = new moodle_url('http://www.youtube.com/view_play_list?p=PL6E18E2927047B662');
         $t = $manager->embed_url($url);
@@ -297,7 +283,41 @@ class media_videojs_testcase extends advanced_testcase {
         $url = new moodle_url('http://www.youtube.com/p/PL6E18E2927047B662');
         $t = $manager->embed_url($url);
         $this->assertNotContains('mediaplugin_videojs', $t);
+    }
 
+    /**
+     * Data provider for {@see test_youtube_start_time}
+     *
+     * @return array
+     */
+    public function youtube_start_time_provider(): array {
+        return [
+            ['https://www.youtube.com/watch?v=JNJMF1l3udM&t=1h11s', 3611],
+            ['https://www.youtube.com/watch?v=dv2f_xfmbD8&index=4&list=PLxcO_MFWQBDcyn9xpbmx601YSDlDcTcr0&t=1m5s', 65],
+            ['https://www.youtube.com/watch?v=JNJMF1l3udM&t=1h10m30s', 4230],
+            ['https://www.youtube.com/watch?v=JNJMF1l3udM&t=3m', 180],
+            ['https://www.youtube.com/watch?v=JNJMF1l3udM&t=43s', 43],
+            ['https://www.youtube.com/watch?v=JNJMF1l3udM&t=1234', 1234],
+            ['https://www.youtube.com/watch?v=JNJMF1l3udM&t=invalid', 0],
+        ];
+    }
+
+    /**
+     * Test Youtube video embedding with URL's containing start time interval
+     *
+     * @param string $url
+     * @param int $expectedstart
+     *
+     * @dataProvider youtube_start_time_provider
+     */
+    public function test_youtube_start_time(string $url, int $expectedstart) {
+        set_config('youtube', 1, 'media_videojs');
+        set_config('useflash', 0, 'media_videojs');
+
+        $embedcode = core_media_manager::instance()->embed_url(new moodle_url($url));
+
+        $this->youtube_plugin_engaged($embedcode);
+        $this->assertContains("&quot;youtube&quot;: {&quot;start&quot;: &quot;{$expectedstart}&quot;}", $embedcode);
     }
 
     /**

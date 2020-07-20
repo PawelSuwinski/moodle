@@ -1,1 +1,6 @@
-changegradewarning,mod_assign
+duedateno,mod_assign
+mysubmission,mod_assign
+nolatesubmissions,mod_assign
+nosubmissionsacceptedafter,mod_assign
+notsubmittedyet,mod_assign
+submissionsnotgraded,mod_assign

@@ -69,6 +69,10 @@ $strnotingroup       = get_string('notingrouplist', 'group');
 $strnogroup          = get_string('nogroup', 'group');
 $strnogrouping       = get_string('nogrouping', 'group');
 
+// This can show all users and all groups in a course.
+// This is lots of data so allow this script more resources.
+raise_memory_limit(MEMORY_EXTRA);
+
 // Get all groupings and sort them by formatted name.
 $groupings = $DB->get_records('groupings', array('courseid'=>$courseid), 'name');
 foreach ($groupings as $gid => $grouping) {
@@ -106,7 +110,9 @@ if ($groupingid) {
 
 list($sort, $sortparams) = users_order_by_sql('u');
 
-$allnames = get_all_user_name_fields(true, 'u');
+$extrafields = get_extra_user_fields($context);
+$allnames = 'u.id, ' . user_picture::fields('u', $extrafields);
+
 $sql = "SELECT g.id AS groupid, gg.groupingid, u.id AS userid, $allnames, u.idnumber, u.username
           FROM {groups} g
                LEFT JOIN {groupings_groups} gg ON g.id = gg.groupid
@@ -117,8 +123,9 @@ $sql = "SELECT g.id AS groupid, gg.groupingid, u.id AS userid, $allnames, u.idnu
 
 $rs = $DB->get_recordset_sql($sql, array_merge($params, $sortparams));
 foreach ($rs as $row) {
-    $user = new stdClass();
-    $user = username_load_fields_from_object($user, $row, null, array('id' => 'userid', 'username', 'idnumber'));
+    $user = username_load_fields_from_object((object) [], $row, null,
+        array_merge(['id' => 'userid', 'username', 'idnumber'], $extrafields));
+
     if (!$row->groupingid) {
         $row->groupingid = OVERVIEW_GROUPING_GROUP_NO_GROUPING;
     }
@@ -242,11 +249,22 @@ foreach ($members as $gpgid=>$groupdata) {
             $line[] = $name;
         } else {
             $line[] = html_writer::tag('span', $name, array('class' => 'group_hoverdescription', 'data-groupid' => $gpid));
-            $hoverevents[$gpid] = $jsdescription;
+            $hoverevents[$gpid] = get_string('descriptiona', null, $jsdescription);
         }
+        $viewfullnames = has_capability('moodle/site:viewfullnames', $context);
         $fullnames = array();
         foreach ($users as $user) {
-            $fullnames[] = '<a href="'.$CFG->wwwroot.'/user/view.php?id='.$user->id.'&amp;course='.$course->id.'">'.fullname($user, true).'</a>';
+            $displayname = fullname($user, $viewfullnames);
+            if ($extrafields) {
+                $extrafieldsdisplay = [];
+                foreach ($extrafields as $field) {
+                    $extrafieldsdisplay[] = s($user->{$field});
+                }
+                $displayname .= ' (' . implode(', ', $extrafieldsdisplay) . ')';
+            }
+
+            $fullnames[] = html_writer::link(new moodle_url('/user/view.php', ['id' => $user->id, 'course' => $course->id]),
+                $displayname);
         }
         $line[] = implode(', ', $fullnames);
         $line[] = count($users);

@@ -17,6 +17,9 @@
 /**
  * CLI task execution.
  *
+ * @deprecated since Moodle 3.9 MDL-63580. Please use the admin/cli/schedule_task.php.
+ * @todo final deprecation. To be removed in Moodle 4.3 MDL-63594.
+ *
  * @package    tool_task
  * @copyright  2014 Petr Skoda
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -32,6 +35,8 @@ list($options, $unrecognized) = cli_get_params(
     array('help' => false, 'list' => false, 'execute' => false, 'showsql' => false, 'showdebugging' => false),
     array('h' => 'help')
 );
+
+debugging('admin/tool/task/cli/schedule_task.php is deprecated. Please use admin/cli/scheduled_task.php instead.', DEBUG_DEVELOPER);
 
 if ($unrecognized) {
     $unrecognized = implode("\n  ", $unrecognized);
@@ -50,7 +55,7 @@ Options:
 -h, --help            Print out this help
 
 Example:
-\$sudo -u www-data /usr/bin/php admin/tool/task/cli/scheduled_task.php --execute=\\\\core\\\\task\\\\session_cleanup_task
+\$sudo -u www-data /usr/bin/php admin/tool/task/cli/schedule_task.php --execute=\\\\core\\\\task\\\\session_cleanup_task
 
 ";
 
@@ -65,6 +70,7 @@ if ($options['showdebugging']) {
 if ($options['showsql']) {
     $DB->set_debug(true);
 }
+
 if ($options['list']) {
     cli_heading("List of scheduled tasks ($CFG->wwwroot)");
 
@@ -129,6 +135,7 @@ if ($execute = $options['execute']) {
     $predbqueries = $DB->perf_get_queries();
     $pretime = microtime(true);
 
+    \core\task\logmanager::start_logging($task);
     $fullname = $task->get_name() . ' (' . get_class($task) . ')';
     mtrace('Execute scheduled task: ' . $fullname);
     // NOTE: it would be tricky to move this code to \core\task\manager class,

@@ -1,22 +1,20 @@
 /**
- * 	
+ *
  * JQUERY EU COOKIE LAW POPUPS
- * version 1.0.1
- * 
+ * version 1.1.1
+ *
  * Code on Github:
  * https://github.com/wimagguc/jquery-eu-cookie-law-popup
- * 
+ *
  * To see a live demo, go to:
- * http://www.wimagguc.com/2015/03/jquery-eu-cookie-law-popup/
- * 
+ * http://www.wimagguc.com/2018/05/gdpr-compliance-with-the-jquery-eu-cookie-law-plugin/
+ *
  * by Richard Dancsi
  * http://www.wimagguc.com/
- * 
+ *
  */
 
-define(
-['jquery'],
-function($) {
+define(['jquery'], function($) {
 
 // for ie9 doesn't support debug console >>>
 if (!window.console) window.console = {};
@@ -30,7 +28,7 @@ $.fn.euCookieLawPopup = (function() {
 	///////////////////////////////////////////////////////////////////////////////////////////////
 	// PARAMETERS (MODIFY THIS PART) //////////////////////////////////////////////////////////////
 	_self.params = {
-		cookiePolicyUrl : 'http://www.wimagguc.com/?cookie-policy',
+		cookiePolicyUrl : '/?cookie-policy',
 		popupPosition : 'top',
 		colorStyle : 'default',
 		compactStyle : false,
@@ -137,10 +135,10 @@ $.fn.euCookieLawPopup = (function() {
 			return _self.params.htmlMarkup;
 		}
 
-		var html = 
-			'<div class="eupopup-container' + 
-			    ' eupopup-container-' + _self.params.popupPosition + 
-			    (_self.params.compactStyle ? ' eupopup-style-compact' : '') + 
+		var html =
+			'<div class="eupopup-container' +
+			    ' eupopup-container-' + _self.params.popupPosition +
+			    (_self.params.compactStyle ? ' eupopup-style-compact' : '') +
 				' eupopup-color-' + _self.params.colorStyle + '">' +
 				'<div class="eupopup-head">' + _self.params.popupTitle + '</div>' +
 				'<div class="eupopup-body">' + _self.params.popupText + '</div>' +
@@ -174,14 +172,14 @@ $.fn.euCookieLawPopup = (function() {
 		var cookies = document.cookie.split(";");
 		for (var i = 0; i < cookies.length; i++) {
 			var c = cookies[i].trim();
-			if (c.indexOf(_self.vars.COOKIE_NAME) == 0) {
+			if (c.indexOf(_self.vars.COOKIE_NAME) !== -1) {
 				userAcceptedCookies = c.substring(_self.vars.COOKIE_NAME.length + 1, c.length);
 			}
 		}
 
 		return userAcceptedCookies;
 	};
-	
+
 	var hideContainer = function() {
 		// $('.eupopup-container').slideUp(200);
 		$('.eupopup-container').animate({
@@ -206,6 +204,7 @@ $.fn.euCookieLawPopup = (function() {
 
 			// No need to display this if user already accepted the policy
 			if (userAlreadyAcceptedCookies()) {
+        $(document).trigger("user_cookie_already_accepted", {'consent': true});
 				return;
 			}
 
@@ -239,7 +238,7 @@ $.fn.euCookieLawPopup = (function() {
 			// Ready to start!
 			$('.eupopup-container').show();
 
-			// In case it's alright to just display the message once 
+			// In case it's alright to just display the message once
 			if (_self.params.autoAcceptCookiePolicy) {
 				setUserAcceptsCookies(true);
 			}
@@ -250,5 +249,4 @@ $.fn.euCookieLawPopup = (function() {
 
 	return publicfunc;
 });
-
 });

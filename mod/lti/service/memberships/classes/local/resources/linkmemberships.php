@@ -87,18 +87,9 @@ class linkmemberships extends resource_base {
             $response->set_code(404);
             return;
         }
-        $tool = $DB->get_record('lti_types', array('id' => $lti->typeid));
-        if ($tool->toolproxyid == 0) { // We wil use the same permission for this and contextmembers.
-            if (!$this->check_type($lti->typeid, $lti->course, 'ToolProxyBinding.memberships.url:get', null)) {
-                $response->set_code(403);
-                return;
-            }
-        } else {
-            $toolproxy = $DB->get_record('lti_tool_proxies', array('id' => $tool->toolproxyid));
-            if (!$this->check_tool_proxy($toolproxy->guid, $response->get_request_data())) {
-                $response->set_code(403);
-                return;
-            }
+        if (!$this->check_tool($lti->typeid, $response->get_request_data(), array(memberships::SCOPE_MEMBERSHIPS_READ))) {
+            $response->set_code(403);
+            return;
         }
         if (!($course = $DB->get_record('course', array('id' => $lti->course), 'id', IGNORE_MISSING))) {
             $response->set_code(404);
@@ -115,7 +106,8 @@ class linkmemberships extends resource_base {
         if ($info->is_available_for_all()) {
             $info = null;
         }
-        $json = memberships::get_users_json($this, $context, $lti->course, $tool, $role, $limitfrom, $limitnum, $lti, $info);
+        $json = $this->get_service()->get_members_json($this, $context, $course, $role,
+                                                       $limitfrom, $limitnum, $lti, $info, $response);
 
         $response->set_content_type($this->formats[0]);
         $response->set_body($json);
@@ -146,7 +138,7 @@ class linkmemberships extends resource_base {
      */
     public function parse_value($value) {
 
-        if (strpos($value, '$ToolProxyBinding.memberships.url') !== false) {
+        if (strpos($value, '$LtiLink.memberships.url') !== false) {
             $id = optional_param('id', 0, PARAM_INT); // Course Module ID.
             if (!empty($id)) {
                 $cm = get_coursemodule_from_id('lti', $id, 0, false, MUST_EXIST);

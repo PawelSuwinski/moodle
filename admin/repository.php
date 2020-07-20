@@ -47,7 +47,6 @@ if ($action == 'newon') {
     $visible = false;
 }
 
-require_capability('moodle/site:config', context_system::instance());
 admin_externalpage_setup($pagename);
 
 $sesskeyurl = $CFG->wwwroot.'/'.$CFG->admin.'/repository.php?sesskey=' . sesskey();
@@ -124,13 +123,13 @@ if (($action == 'edit') || ($action == 'new')) {
             }
             $instanceoptionnames = repository::static_function($repository, 'get_instance_option_names');
             if (!empty($instanceoptionnames)) {
-                if (array_key_exists('enablecourseinstances', $fromform)) {
+                if (property_exists($fromform, 'enablecourseinstances')) {
                     $settings['enablecourseinstances'] = $fromform->enablecourseinstances;
                 }
                 else {
                     $settings['enablecourseinstances'] = 0;
                 }
-                if (array_key_exists('enableuserinstances', $fromform)) {
+                if (property_exists($fromform, 'enableuserinstances')) {
                     $settings['enableuserinstances'] = $fromform->enableuserinstances;
                 }
                 else {

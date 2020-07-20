@@ -604,7 +604,8 @@ abstract class restore_dbops {
         //             6b) User cannot, check if we are in some contextlevel with fallback
         //                 7a) There is fallback, move ALL the qcats to fallback, warn. End qcat loop
         //                 7b) No fallback, error. End qcat loop
-        //         5b) Match, mark q to be mapped
+        //         5b) Random question, must always create new.
+        //         5c) Match, mark q to be mapped
         // 8) Check if backup is from Moodle >= 3.5 and error if more than one top-level category in the context.
 
         // Get all the contexts (question banks) in restore for the given contextlevel
@@ -708,7 +709,11 @@ abstract class restore_dbops {
                                 break 2; // out from qcat loop (both 7a and 7b), we have decided about ALL categories in context (bank)
                             }
 
-                        // 5b) Match, mark q to be mapped
+                        // 5b) Random questions must always be newly created.
+                        } else if ($question->qtype == 'random') {
+                            // Nothing to mark, newitemid means create
+
+                        // 5c) Match, mark q to be mapped.
                         } else {
                             self::set_backup_ids_record($restoreid, 'question', $question->id, $matchqid);
                         }
@@ -718,7 +723,7 @@ abstract class restore_dbops {
 
             // 8) Check if backup is made on Moodle >= 3.5 and there are more than one top-level category in the context.
             if ($after35 && $topcats > 1) {
-                $errors[] = get_string('restoremultipletopcats', 'questions', $contextid);
+                $errors[] = get_string('restoremultipletopcats', 'question', $contextid);
             }
 
         }
@@ -1049,17 +1054,40 @@ abstract class restore_dbops {
                     // Create the file in the filepool if it does not exist yet.
                     if (!$fs->file_exists($newcontextid, $component, $filearea, $rec->newitemid, $file->filepath, $file->filename)) {
 
-                        // Even if a file has been deleted since the backup was made, the file metadata will remain in the
-                        // files table, and the file will not be moved to the trashdir.
-                        // Files are not cleared from the files table by cron until several days after deletion.
+                        // Even if a file has been deleted since the backup was made, the file metadata may remain in the
+                        // files table, and the file will not yet have been moved to the trashdir. e.g. a draft file version.
+                        // Try to recover from file table first.
                         if ($foundfiles = $DB->get_records('files', array('contenthash' => $file->contenthash), '', '*', 0, 1)) {
                             // Only grab one of the foundfiles - the file content should be the same for all entries.
                             $foundfile = reset($foundfiles);
                             $fs->create_file_from_storedfile($file_record, $foundfile->id);
                         } else {
-                            // A matching existing file record was not found in the database.
-                            $results[] = self::get_missing_file_result($file);
-                            continue;
+                            $filesystem = $fs->get_file_system();
+                            $restorefile = $file;
+                            $restorefile->contextid = $newcontextid;
+                            $restorefile->itemid = $rec->newitemid;
+                            $storedfile = new stored_file($fs, $restorefile);
+
+                            // Ok, let's try recover this file.
+                            // 1. We check if the file can be fetched locally without attempting to fetch
+                            //    from the trash.
+                            // 2. We check if we can get the remote filepath for the specified stored file.
+                            // 3. We check if the file can be fetched from the trash.
+                            // 4. All failed, say we couldn't find it.
+                            if ($filesystem->is_file_readable_locally_by_storedfile($storedfile)) {
+                                $localpath = $filesystem->get_local_path_from_storedfile($storedfile);
+                                $fs->create_file_from_pathname($file, $localpath);
+                            } else if ($filesystem->is_file_readable_remotely_by_storedfile($storedfile)) {
+                                $url = $filesystem->get_remote_path_from_storedfile($storedfile);
+                                $fs->create_file_from_url($file, $url);
+                            } else if ($filesystem->is_file_readable_locally_by_storedfile($storedfile, true)) {
+                                $localpath = $filesystem->get_local_path_from_storedfile($storedfile, true);
+                                $fs->create_file_from_pathname($file, $localpath);
+                            } else {
+                                // A matching file was not found.
+                                $results[] = self::get_missing_file_result($file);
+                                continue;
+                            }
                         }
                     }
                 }
@@ -1366,7 +1394,9 @@ abstract class restore_dbops {
             // Note: for DB deleted users md5(username) is stored *sometimes* in the email field,
             //       hence we are looking there for usernames if not empty. See delete_user()
             // If match by id and mnethost and user is deleted in DB and
-            // match by username LIKE 'backup_email.%' or by non empty email = md5(username) => ok, return target user
+            // match by username LIKE 'substring(backup_email).%' where the substr length matches the retained data in the
+            // username field (100 - (timestamp + 1) characters), or by non empty email = md5(username) => ok, return target user.
+            $usernamelookup = core_text::substr($user->email, 0, 89) . '.%';
             if ($rec = $DB->get_record_sql("SELECT *
                                               FROM {user} u
                                              WHERE id = ?
@@ -1379,13 +1409,14 @@ abstract class restore_dbops {
                                                        AND email = ?
                                                        )
                                                    )",
-                                           array($user->id, $user->mnethostid, $user->email.'.%', md5($user->username)))) {
+                                           array($user->id, $user->mnethostid, $usernamelookup, md5($user->username)))) {
                 return $rec; // Matching user, deleted in DB found, return it
             }
 
             // 1D - Handle users deleted in backup file and "alive" in DB
             // If match by id and mnethost and user is deleted in backup file
-            // and match by email = email_without_time(backup_email) => ok, return target user
+            // and match by substring(email) = email_without_time(backup_email) where the substr length matches the retained data
+            // in the username field (100 - (timestamp + 1) characters) => ok, return target user.
             if ($user->deleted) {
                 // Note: for DB deleted users email is stored in username field, hence we
                 //       are looking there for emails. See delete_user()
@@ -1395,7 +1426,7 @@ abstract class restore_dbops {
                                                   FROM {user} u
                                                  WHERE id = ?
                                                    AND mnethostid = ?
-                                                   AND UPPER(email) = UPPER(?)",
+                                                   AND " . $DB->sql_substr('UPPER(email)', 1, 89) . " = UPPER(?)",
                                                array($user->id, $user->mnethostid, $trimemail))) {
                     return $rec; // Matching user, deleted in backup file found, return it
                 }
@@ -1442,7 +1473,8 @@ abstract class restore_dbops {
             // Note: for DB deleted users md5(username) is stored *sometimes* in the email field,
             //       hence we are looking there for usernames if not empty. See delete_user()
             // 2B1 - If match by mnethost and user is deleted in DB and not empty email = md5(username) and
-            //       (by username LIKE 'backup_email.%' or non-zero firstaccess) => ok, return target user
+            //       (by username LIKE 'substring(backup_email).%' or non-zero firstaccess) => ok, return target user.
+            $usernamelookup = core_text::substr($user->email, 0, 89) . '.%';
             if ($rec = $DB->get_record_sql("SELECT *
                                               FROM {user} u
                                              WHERE mnethostid = ?
@@ -1456,14 +1488,15 @@ abstract class restore_dbops {
                                                        AND firstaccess = ?
                                                        )
                                                    )",
-                                           array($user->mnethostid, md5($user->username), $user->email.'.%', $user->firstaccess))) {
+                                           array($user->mnethostid, md5($user->username), $usernamelookup, $user->firstaccess))) {
                 return $rec; // Matching user found, return it
             }
 
             // 2B2 - If match by mnethost and user is deleted in DB and
-            //       username LIKE 'backup_email.%' and non-zero firstaccess) => ok, return target user
+            //       username LIKE 'substring(backup_email).%' and non-zero firstaccess) => ok, return target user
             //       (this covers situations where md5(username) wasn't being stored so we require both
             //        the email & non-zero firstaccess to match)
+            $usernamelookup = core_text::substr($user->email, 0, 89) . '.%';
             if ($rec = $DB->get_record_sql("SELECT *
                                               FROM {user} u
                                              WHERE mnethostid = ?
@@ -1471,13 +1504,13 @@ abstract class restore_dbops {
                                                AND UPPER(username) LIKE UPPER(?)
                                                AND firstaccess != 0
                                                AND firstaccess = ?",
-                                           array($user->mnethostid, $user->email.'.%', $user->firstaccess))) {
+                                           array($user->mnethostid, $usernamelookup, $user->firstaccess))) {
                 return $rec; // Matching user found, return it
             }
 
             // 2C - Handle users deleted in backup file and "alive" in DB
             // If match mnethost and user is deleted in backup file
-            // and match by email = email_without_time(backup_email) and non-zero firstaccess=> ok, return target user
+            // and match by substring(email) = email_without_time(backup_email) and non-zero firstaccess=> ok, return target user.
             if ($user->deleted) {
                 // Note: for DB deleted users email is stored in username field, hence we
                 //       are looking there for emails. See delete_user()
@@ -1486,7 +1519,7 @@ abstract class restore_dbops {
                 if ($rec = $DB->get_record_sql("SELECT *
                                                   FROM {user} u
                                                  WHERE mnethostid = ?
-                                                   AND UPPER(email) = UPPER(?)
+                                                   AND " . $DB->sql_substr('UPPER(email)', 1, 89) . " = UPPER(?)
                                                    AND firstaccess != 0
                                                    AND firstaccess = ?",
                                                array($user->mnethostid, $trimemail, $user->firstaccess))) {

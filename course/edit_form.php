@@ -4,7 +4,6 @@ defined('MOODLE_INTERNAL') || die;
 
 require_once($CFG->libdir.'/formslib.php');
 require_once($CFG->libdir.'/completionlib.php');
-require_once($CFG->libdir. '/coursecatlib.php');
 
 /**
  * The form for handling editing a course.
@@ -77,7 +76,7 @@ class course_edit_form extends moodleform {
         // Verify permissions to change course category or keep current.
         if (empty($course->id)) {
             if (has_capability('moodle/course:create', $categorycontext)) {
-                $displaylist = coursecat::make_categories_list('moodle/course:create');
+                $displaylist = core_course_category::make_categories_list('moodle/course:create');
                 $mform->addElement('select', 'category', get_string('coursecategory'), $displaylist);
                 $mform->addHelpButton('category', 'coursecategory');
                 $mform->setDefault('category', $category->id);
@@ -88,10 +87,11 @@ class course_edit_form extends moodleform {
             }
         } else {
             if (has_capability('moodle/course:changecategory', $coursecontext)) {
-                $displaylist = coursecat::make_categories_list('moodle/course:changecategory');
+                $displaylist = core_course_category::make_categories_list('moodle/course:changecategory');
                 if (!isset($displaylist[$course->category])) {
                     //always keep current
-                    $displaylist[$course->category] = coursecat::get($course->category, MUST_EXIST, true)->get_formatted_name();
+                    $displaylist[$course->category] = core_course_category::get($course->category, MUST_EXIST, true)
+                        ->get_formatted_name();
                 }
                 $mform->addElement('select', 'category', get_string('coursecategory'), $displaylist);
                 $mform->addHelpButton('category', 'coursecategory');
@@ -128,6 +128,26 @@ class course_edit_form extends moodleform {
 
         $mform->addElement('date_time_selector', 'enddate', get_string('enddate'), array('optional' => true));
         $mform->addHelpButton('enddate', 'enddate');
+
+        if (!empty($CFG->enablecourserelativedates)) {
+            $attributes = [
+                'aria-describedby' => 'relativedatesmode_warning'
+            ];
+            if (!empty($course->id)) {
+                $attributes['disabled'] = true;
+            }
+            $relativeoptions = [
+                0 => get_string('no'),
+                1 => get_string('yes'),
+            ];
+            $relativedatesmodegroup = [];
+            $relativedatesmodegroup[] = $mform->createElement('select', 'relativedatesmode', get_string('relativedatesmode'),
+                $relativeoptions, $attributes);
+            $relativedatesmodegroup[] = $mform->createElement('html', html_writer::span(get_string('relativedatesmode_warning'),
+                '', ['id' => 'relativedatesmode_warning']));
+            $mform->addGroup($relativedatesmodegroup, 'relativedatesmodegroup', get_string('relativedatesmode'), null, false);
+            $mform->addHelpButton('relativedatesmodegroup', 'relativedatesmode');
+        }
 
         $mform->addElement('text','idnumber', get_string('idnumbercourse'),'maxlength="100"  size="10"');
         $mform->addHelpButton('idnumber', 'idnumbercourse');
@@ -320,6 +340,11 @@ class course_edit_form extends moodleform {
                     array('itemtype' => 'course', 'component' => 'core'));
         }
 
+        // Add custom fields to the form.
+        $handler = core_course\customfield\course_handler::create();
+        $handler->set_parent_context($categorycontext); // For course handler only.
+        $handler->instance_form_definition($mform, empty($course->id) ? 0 : $course->id);
+
         // When two elements we need a group.
         $buttonarray = array();
         $classarray = array('class' => 'form-submit');
@@ -334,6 +359,8 @@ class course_edit_form extends moodleform {
         $mform->addElement('hidden', 'id', null);
         $mform->setType('id', PARAM_INT);
 
+        // Prepare custom fields data.
+        $handler->instance_form_before_set_data($course);
         // Finally set the current form data
         $this->set_data($course);
     }
@@ -383,6 +410,10 @@ class course_edit_form extends moodleform {
                 $mform->removeElement('newsitems');
             }
         }
+
+        // Tweak the form with values provided by custom fields in use.
+        $handler  = core_course\customfield\course_handler::create();
+        $handler->instance_form_definition_after_data($mform, empty($courseid) ? 0 : $courseid);
     }
 
     /**
@@ -425,7 +456,10 @@ class course_edit_form extends moodleform {
             $errors = array_merge($errors, $formaterrors);
         }
 
+        // Add the custom fields validation.
+        $handler = core_course\customfield\course_handler::create();
+        $errors  = array_merge($errors, $handler->instance_form_validation($data, $files));
+
         return $errors;
     }
 }
-

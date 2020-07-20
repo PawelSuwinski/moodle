@@ -32,7 +32,7 @@ use stdClass;
 use html_writer;
 
 /**
- * Methods to use when publishing and searching courses on moodle.net
+ * Methods to use when registering the site at the moodle sites directory.
  *
  * @package    core
  * @copyright  2017 Marina Glancy
@@ -40,11 +40,11 @@ use html_writer;
  */
 class registration {
 
-    /** @var Fields used in a site registration form.
+    /** @var array Fields used in a site registration form.
      * IMPORTANT: any new fields with non-empty defaults have to be added to CONFIRM_NEW_FIELDS */
-    const FORM_FIELDS = ['name', 'description', 'contactname', 'contactemail', 'contactphone', 'imageurl', 'privacy', 'street',
-        'regioncode', 'countrycode', 'geolocation', 'contactable', 'emailalert', 'emailalertemail', 'commnews', 'commnewsemail',
-        'language', 'policyagreed'];
+    const FORM_FIELDS = ['policyagreed', 'language', 'countrycode', 'privacy',
+        'contactemail', 'contactable', 'emailalert', 'emailalertemail', 'commnews', 'commnewsemail',
+        'contactname', 'name', 'description', 'imageurl', 'contactphone', 'regioncode', 'geolocation', 'street'];
 
     /** @var List of new FORM_FIELDS or siteinfo fields added indexed by the version when they were added.
      * If site was already registered, admin will be promted to confirm new registration data manually. Until registration is manually confirmed,
@@ -56,6 +56,10 @@ class registration {
             'commnews', // Receive communication news. This was added in 3.4 and is "On" by default. Admin must confirm or opt-out.
             'mobileservicesenabled', 'mobilenotificationsenabled', 'registereduserdevices', 'registeredactiveuserdevices' // Mobile stats added in 3.4.
         ],
+        // Analytics stats added in Moodle 3.7.
+        2019022200 => ['analyticsenabledmodels', 'analyticspredictions', 'analyticsactions', 'analyticsactionsnotuseful'],
+        // Active users stats added in Moodle 3.9.
+        2020022600 => ['activeusers', 'activeparticipantnumberaverage'],
     ];
 
     /** @var Site privacy: not displayed */
@@ -80,7 +84,7 @@ class registration {
         global $DB;
 
         if (self::$registration === null) {
-            self::$registration = $DB->get_record('registration_hubs', ['huburl' => HUB_MOODLEORGHUBURL]);
+            self::$registration = $DB->get_record('registration_hubs', ['huburl' => HUB_MOODLEORGHUBURL]) ?: null;
         }
 
         if (self::$registration && (bool)self::$registration->confirmed == (bool)$confirmed) {
@@ -145,7 +149,7 @@ class registration {
     }
 
     /**
-     * Calculates and prepares site information to send to moodle.net as part of registration or update
+     * Calculates and prepares site information to send to the sites directory as a part of registration.
      *
      * @param array $defaults default values for inputs in the registration form (if site was never registered before)
      * @return array site info
@@ -156,9 +160,8 @@ class registration {
         require_once($CFG->dirroot . "/course/lib.php");
 
         $siteinfo = array();
-        $cleanhuburl = clean_param(HUB_MOODLEORGHUBURL, PARAM_ALPHANUMEXT);
         foreach (self::FORM_FIELDS as $field) {
-            $siteinfo[$field] = get_config('hub', 'site_'.$field.'_' . $cleanhuburl);
+            $siteinfo[$field] = get_config('hub', 'site_'.$field);
             if ($siteinfo[$field] === false) {
                 $siteinfo[$field] = array_key_exists($field, $defaults) ? $defaults[$field] : null;
             }
@@ -167,6 +170,7 @@ class registration {
         // Statistical data.
         $siteinfo['courses'] = $DB->count_records('course') - 1;
         $siteinfo['users'] = $DB->count_records('user', array('deleted' => 0));
+        $siteinfo['activeusers'] = $DB->count_records_select('user', 'deleted = ? AND lastlogin > ?', [0, time() - DAYSECS * 30]);
         $siteinfo['enrolments'] = $DB->count_records('role_assignments');
         $siteinfo['posts'] = $DB->count_records('forum_posts');
         $siteinfo['questions'] = $DB->count_records('question');
@@ -174,6 +178,7 @@ class registration {
         $siteinfo['badges'] = $DB->count_records_select('badge', 'status <> ' . BADGE_STATUS_ARCHIVED);
         $siteinfo['issuedbadges'] = $DB->count_records('badge_issued');
         $siteinfo['participantnumberaverage'] = average_number_of_participants();
+        $siteinfo['activeparticipantnumberaverage'] = average_number_of_participants(true, time() - DAYSECS * 30);
         $siteinfo['modulenumberaverage'] = average_number_of_courses_modules();
 
         // Version and url.
@@ -196,13 +201,19 @@ class registration {
             }
         }
 
+        // Analytics related data follow.
+        $siteinfo['analyticsenabledmodels'] = \core_analytics\stats::enabled_models();
+        $siteinfo['analyticspredictions'] = \core_analytics\stats::predictions();
+        $siteinfo['analyticsactions'] = \core_analytics\stats::actions();
+        $siteinfo['analyticsactionsnotuseful'] = \core_analytics\stats::actions_not_useful();
+
         // IMPORTANT: any new fields in siteinfo have to be added to the constant CONFIRM_NEW_FIELDS.
 
         return $siteinfo;
     }
 
     /**
-     * Human-readable summary of data that will be sent to moodle.net
+     * Human-readable summary of data that will be sent to the sites directory.
      *
      * @param array $siteinfo result of get_site_info()
      * @return string
@@ -222,6 +233,7 @@ class registration {
             'moodlerelease' => get_string('sitereleasenum', 'hub', $moodlerelease),
             'courses' => get_string('coursesnumber', 'hub', $siteinfo['courses']),
             'users' => get_string('usersnumber', 'hub', $siteinfo['users']),
+            'activeusers' => get_string('activeusersnumber', 'hub', $siteinfo['activeusers']),
             'enrolments' => get_string('roleassignmentsnumber', 'hub', $siteinfo['enrolments']),
             'posts' => get_string('postsnumber', 'hub', $siteinfo['posts']),
             'questions' => get_string('questionsnumber', 'hub', $siteinfo['questions']),
@@ -230,12 +242,18 @@ class registration {
             'issuedbadges' => get_string('issuedbadgesnumber', 'hub', $siteinfo['issuedbadges']),
             'participantnumberaverage' => get_string('participantnumberaverage', 'hub',
                 format_float($siteinfo['participantnumberaverage'], 2)),
+            'activeparticipantnumberaverage' => get_string('activeparticipantnumberaverage', 'hub',
+                format_float($siteinfo['activeparticipantnumberaverage'], 2)),
             'modulenumberaverage' => get_string('modulenumberaverage', 'hub',
                 format_float($siteinfo['modulenumberaverage'], 2)),
             'mobileservicesenabled' => get_string('mobileservicesenabled', 'hub', $mobileservicesenabled),
             'mobilenotificationsenabled' => get_string('mobilenotificationsenabled', 'hub', $mobilenotificationsenabled),
             'registereduserdevices' => get_string('registereduserdevices', 'hub', $siteinfo['registereduserdevices']),
             'registeredactiveuserdevices' => get_string('registeredactiveuserdevices', 'hub', $siteinfo['registeredactiveuserdevices']),
+            'analyticsenabledmodels' => get_string('analyticsenabledmodels', 'hub', $siteinfo['analyticsenabledmodels']),
+            'analyticspredictions' => get_string('analyticspredictions', 'hub', $siteinfo['analyticspredictions']),
+            'analyticsactions' => get_string('analyticsactions', 'hub', $siteinfo['analyticsactions']),
+            'analyticsactionsnotuseful' => get_string('analyticsactionsnotuseful', 'hub', $siteinfo['analyticsactionsnotuseful']),
         ];
 
         foreach ($senddata as $key => $str) {
@@ -252,13 +270,12 @@ class registration {
      * @param stdClass $formdata data from {@link site_registration_form}
      */
     public static function save_site_info($formdata) {
-        $cleanhuburl = clean_param(HUB_MOODLEORGHUBURL, PARAM_ALPHANUMEXT);
         foreach (self::FORM_FIELDS as $field) {
-            set_config('site_' . $field . '_' . $cleanhuburl, $formdata->$field, 'hub');
+            set_config('site_' . $field, $formdata->$field, 'hub');
         }
-        // Even if the the connection with moodle.net fails, admin has manually submitted the form which means they don't need
+        // Even if the connection with the sites directory fails, admin has manually submitted the form which means they don't need
         // to be redirected to the site registration page any more.
-        set_config('site_regupdateversion_' . $cleanhuburl, max(array_keys(self::CONFIRM_NEW_FIELDS)), 'hub');
+        set_config('site_regupdateversion', max(array_keys(self::CONFIRM_NEW_FIELDS)), 'hub');
     }
 
     /**
@@ -275,6 +292,11 @@ class registration {
         try {
             api::update_registration($siteinfo);
         } catch (moodle_exception $e) {
+            if (!self::is_registered()) {
+                // Token was rejected during registration update and site and locally stored token was reset,
+                // proceed to site registration. This method will redirect away.
+                self::register('');
+            }
             \core\notification::add(get_string('errorregistrationupdate', 'hub', $e->getMessage()),
                 \core\output\notification::NOTIFY_ERROR);
             return false;
@@ -312,7 +334,7 @@ class registration {
     }
 
     /**
-     * Confirms registration by moodle.net
+     * Confirms registration by the sites directory.
      *
      * @param string $token
      * @param string $newtoken
@@ -333,6 +355,21 @@ class registration {
         $record['timemodified'] = time();
         $DB->update_record('registration_hubs', $record);
         self::$registration = null;
+
+        $siteinfo = self::get_site_info();
+        if (strlen(http_build_query($siteinfo)) > 1800) {
+            // Update registration again because the initial request was too long and could have been truncated.
+            api::update_registration($siteinfo);
+            self::$registration = null;
+        }
+
+        // Finally, allow other plugins to perform actions once a site is registered for first time.
+        $pluginsfunction = get_plugins_with_function('post_site_registration_confirmed');
+        foreach ($pluginsfunction as $plugins) {
+            foreach ($plugins as $pluginfunction) {
+                $pluginfunction($registration->id);
+            }
+        }
     }
 
     /**
@@ -351,8 +388,8 @@ class registration {
      * Registers a site
      *
      * This method will make sure that unconfirmed registration record is created and then redirect to
-     * registration script on https://moodle.net
-     * Moodle.net will check that the site is accessible, register it and redirect back
+     * registration script on the sites directory.
+     * The sites directory will check that the site is accessible, register it and redirect back
      * to /admin/registration/confirmregistration.php
      *
      * @param string $returnurl
@@ -373,7 +410,7 @@ class registration {
             $hub->token = get_site_identifier();
             $hub->secret = $hub->token;
             $hub->huburl = HUB_MOODLEORGHUBURL;
-            $hub->hubname = 'Moodle.net';
+            $hub->hubname = 'moodle';
             $hub->confirmed = 0;
             $hub->timemodified = time();
             $hub->id = $DB->insert_record('registration_hubs', $hub);
@@ -381,10 +418,21 @@ class registration {
         }
 
         $params = self::get_site_info();
-        $params['token'] = $hub->token;
+
+        // The most conservative limit for the redirect URL length is 2000 characters. Only pass parameters before
+        // we reach this limit. The next registration update will update all fields.
+        // We will also update registration after we receive confirmation from moodle.net.
+        $url = new moodle_url(HUB_MOODLEORGHUBURL . '/local/hub/siteregistration.php',
+            ['token' => $hub->token, 'url' => $params['url']]);
+        foreach ($params as $key => $value) {
+            if (strlen($url->out(false, [$key => $value])) > 2000) {
+                break;
+            }
+            $url->param($key, $value);
+        }
 
         $SESSION->registrationredirect = $returnurl;
-        redirect(new moodle_url(HUB_MOODLEORGHUBURL . '/local/hub/siteregistration.php', $params));
+        redirect($url);
     }
 
     /**
@@ -401,19 +449,6 @@ class registration {
             return true;
         }
 
-        // Unpublish the courses.
-        try {
-            publication::delete_all_publications($unpublishalladvertisedcourses, $unpublishalluploadedcourses);
-        } catch (moodle_exception $e) {
-            $errormessage = $e->getMessage();
-            $errormessage .= \html_writer::empty_tag('br') .
-                get_string('errorunpublishcourses', 'hub');
-
-            \core\notification::add(get_string('unregistrationerror', 'hub', $errormessage),
-                \core\output\notification::NOTIFY_ERROR);
-            return false;
-        }
-
         // Course unpublish went ok, unregister the site now.
         try {
             api::unregister_site();
@@ -426,6 +461,20 @@ class registration {
         $DB->delete_records('registration_hubs', array('id' => $hub->id));
         self::$registration = null;
         return true;
+    }
+
+    /**
+     * Resets the registration token without changing site identifier so site can be re-registered
+     *
+     * @return bool
+     */
+    public static function reset_token() {
+        global $DB;
+        if (!$hub = self::get_registration()) {
+            return true;
+        }
+        $DB->delete_records('registration_hubs', array('id' => $hub->id));
+        self::$registration = null;
     }
 
     /**
@@ -451,20 +500,20 @@ class registration {
     }
 
     /**
-     * Returns information about moodle.net
+     * Returns information about the sites directory.
      *
      * Example of the return array:
      * {
      *     "courses": 384,
-     *     "description": "Moodle.net connects you with free content and courses shared by Moodle ...",
-     *     "downloadablecourses": 190,
-     *     "enrollablecourses": 194,
+     *     "description": "Official moodle sites directory",
+     *     "downloadablecourses": 0,
+     *     "enrollablecourses": 0,
      *     "hublogo": 1,
      *     "language": "en",
-     *     "name": "Moodle.net",
+     *     "name": "moodle",
      *     "sites": 274175,
-     *     "url": "https://moodle.net",
-     *     "imgurl": moodle_url : "https://moodle.net/local/hub/webservice/download.php?filetype=hubscreenshot"
+     *     "url": "https://stats.moodle.org",
+     *     "imgurl": "https://stats.moodle.org/local/hub/webservice/download.php?filetype=hubscreenshot"
      * }
      *
      * @return array|null
@@ -473,8 +522,8 @@ class registration {
         try {
             return api::get_hub_info();
         } catch (moodle_exception $e) {
-            // Ignore error, we only need it for displaying information about moodle.net, if this request
-            // fails, it's not a big deal.
+            // Ignore error, we only need it for displaying information about the sites directory.
+            // If this request fails, it's not a big deal.
             return null;
         }
     }
@@ -493,13 +542,10 @@ class registration {
             $markasviewed = true;
         } else {
             $showregistration = !empty($CFG->registrationpending);
-            if ($showregistration) {
-                $host = parse_url($CFG->wwwroot, PHP_URL_HOST);
-                if ($host === 'localhost' || preg_match('|^127\.\d+\.\d+\.\d+$|', $host)) {
-                    // If it's a localhost, don't redirect to registration, it won't work anyway.
-                    $showregistration = false;
-                    $markasviewed = true;
-                }
+            if ($showregistration && !site_is_public()) {
+                // If it's not a public site, don't redirect to registration, it won't work anyway.
+                $showregistration = false;
+                $markasviewed = true;
             }
         }
         if ($markasviewed !== null) {
@@ -522,8 +568,7 @@ class registration {
             return $fieldsneedconfirm;
         }
 
-        $cleanhuburl = clean_param(HUB_MOODLEORGHUBURL, PARAM_ALPHANUMEXT);
-        $lastupdated = (int)get_config('hub', 'site_regupdateversion_' . $cleanhuburl);
+        $lastupdated = (int)get_config('hub', 'site_regupdateversion');
         foreach (self::CONFIRM_NEW_FIELDS as $version => $fields) {
             if ($version > $lastupdated) {
                 $fieldsneedconfirm = array_merge($fieldsneedconfirm, $fields);

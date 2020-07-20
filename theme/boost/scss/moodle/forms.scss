@@ -36,6 +36,11 @@
     }
 }
 
+.unresponsive.mform .form-inline,
+.unresponsive.mform .form-inline label {
+    display: inline-flex;
+}
+
 #jump-to-activity.custom-select {
     width: 100%;
 }
@@ -44,8 +49,11 @@
     margin-bottom: $spacer / 2;
     border-bottom: $border-width solid $table-border-color;
 }
-.mform > .form-group {
-    margin-left: $spacer * 1.5;
+
+@include media-breakpoint-up(sm) {
+    .mform > .form-group {
+        margin-left: $spacer * 1.5;
+    }
 }
 
 .editor_atto_content.form-control {
@@ -85,7 +93,7 @@ input#id_externalurl {
 
 .form-defaultinfo,
 .form-label .form-shortname {
-    @extend .text-muted;
+    color: $text-muted;
 }
 
 .form-label .form-shortname {
@@ -102,7 +110,7 @@ input#id_externalurl {
 }
 
 .formsettingheading .form-horizontal {
-    @extend .text-muted;
+    color: $text-muted;
 }
 
 // Moodle doesn't differentiate between what Bootstrap calls
@@ -110,23 +118,12 @@ input#id_externalurl {
 // uneditable looks ugly, styling both as form help is fairly
 // subtle in it's impact. Going for the latter as the best option.
 .no-felement.fstatic {
-    @extend .text-muted;
+    color: $text-muted;
     padding-top: 5px;
 }
 
 .no-fitem .fstaticlabel {
     font-weight: bold;
-}
-
-// Pale grey container for submit buttons.
-.form-buttons,
-.path-admin .buttons,
-#fitem_id_submitbutton,
-.fp-content-center form + div,
-div.backup-section + form,
-#fgroup_id_buttonar {
-    @extend .form-group;
-    padding-left: 0;
 }
 
 .form-item .form-setting .defaultsnext > input {
@@ -164,6 +161,11 @@ div.backup-section + form,
 .mform .fitem .felement input[name="phone2"] {
     text-align: left;
     direction: ltr;
+}
+
+// Reduce the mediaplugin width when using inside forms.
+.que.match .mediaplugin {
+    width: 50vw;
 }
 
 /* rtl:ignore */
@@ -277,8 +279,12 @@ fieldset.coursesearchbox label {
     min-height: 2 * $input-padding-y-sm + 2 * $font-size-base;
 }
 
-.form-autocomplete-multiple [role=listitem] {
+.form-autocomplete-selection [role=listitem] {
     cursor: pointer;
+    white-space: inherit;
+    word-break: break-word;
+    line-height: 1.4;
+    text-align: left;
 }
 
 .form-autocomplete-suggestions {
@@ -315,10 +321,15 @@ fieldset.coursesearchbox label {
 
 .form-autocomplete-downarrow {
     color: $body-color;
-    position: relative;
-    top: 0.2em;
-    left: -1.5em;
+    top: 0.2rem;
+    right: 0.5rem;
     cursor: pointer;
+    .loading-icon {
+        position: absolute;
+        top: 0;
+        left: 0;
+        background-color: $white;
+    }
 }
 
 .form-autocomplete-selection:focus {
@@ -349,6 +360,7 @@ select[size="1"] {
 
 textarea[data-auto-rows] {
     overflow-x: hidden;
+    resize: none;
 }
 
 /** Display elements under labels in vertical forms regardless of the screen size. */
@@ -445,5 +457,42 @@ textarea[data-auto-rows] {
         */
         /*rtl:remove*/
         background-image: url([[pix:t/collapsed]]);
+    }
+
+    .mform {
+        .form-inline {
+            .fdefaultcustom {
+                label {
+                    justify-content: initial;
+                }
+            }
+        }
+    }
+}
+
+// Form inset on the left/right.
+// Used to display an icon/button within the form control.
+.input-group {
+    &.form-inset {
+        .form-inset-item {
+            position: absolute;
+            padding-top: calc(#{$input-padding-y} + #{$input-border-width});
+            z-index: 3;
+        }
+
+        &.form-inset-left {
+            .form-control {
+                padding-left: $spacer * 1.5;
+            }
+        }
+
+        &.form-inset-right {
+            .form-control {
+                padding-right: $spacer * 1.5;
+            }
+            .form-inset-item {
+                right: 0;
+            }
+        }
     }
 }

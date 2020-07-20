@@ -64,15 +64,6 @@ function book_get_nav_classes() {
 }
 
 /**
- * Returns all other caps used in module
- * @return array
- */
-function book_get_extra_capabilities() {
-    // used for group-members-only
-    return array('moodle/site:accessallgroups');
-}
-
-/**
  * Add book instance.
  *
  * @param stdClass $data
@@ -224,17 +215,11 @@ function book_grades($bookid) {
 }
 
 /**
- * This function returns if a scale is being used by one book
- * it it has support for grading and scales. Commented code should be
- * modified if necessary. See book, glossary or journal modules
- * as reference.
- *
- * @param int $bookid
- * @param int $scaleid
- * @return boolean True if the scale is used by any journal
+ * @deprecated since Moodle 3.8
  */
-function book_scale_used($bookid, $scaleid) {
-    return false;
+function book_scale_used() {
+    throw new coding_exception('book_scale_used() can not be used anymore. Plugins can implement ' .
+        '<modname>_scale_used_anywhere, all implementations of <modname>_scale_used are now ignored');
 }
 
 /**
@@ -579,7 +564,7 @@ function book_export_contents($cm, $baseurl) {
     $currentchapter = 0;
 
     foreach ($chapters as $chapter) {
-        if ($chapter->hidden) {
+        if ($chapter->hidden && !has_capability('mod/book:viewhiddenchapters', $context)) {
             continue;
         }
 
@@ -588,6 +573,7 @@ function book_export_contents($cm, $baseurl) {
             "title"     => format_string($chapter->title, true, array('context' => $context)),
             "href"      => $chapter->id . "/index.html",
             "level"     => 0,
+            "hidden"    => $chapter->hidden,
             "subitems"  => array()
         );
 
@@ -620,6 +606,7 @@ function book_export_contents($cm, $baseurl) {
         $chapterindexfile['userid']       = null;
         $chapterindexfile['author']       = null;
         $chapterindexfile['license']      = null;
+        $chapterindexfile['tags']         = \core_tag\external\util::get_item_tags('mod_book', 'book_chapters', $chapter->id);
         $contents[] = $chapterindexfile;
 
         // Chapter files (images usually).
@@ -738,11 +725,9 @@ function mod_book_get_fontawesome_icon_map() {
     return [
         'mod_book:chapter' => 'fa-bookmark-o',
         'mod_book:nav_prev' => 'fa-arrow-left',
-        'mod_book:nav_prev_dis' => 'fa-angle-left',
         'mod_book:nav_sep' => 'fa-minus',
         'mod_book:add' => 'fa-plus',
         'mod_book:nav_next' => 'fa-arrow-right',
-        'mod_book:nav_next_dis' => 'fa-angle-right',
         'mod_book:nav_exit' => 'fa-arrow-up',
     ];
 }
@@ -755,20 +740,34 @@ function mod_book_get_fontawesome_icon_map() {
  *
  * @param calendar_event $event
  * @param \core_calendar\action_factory $factory
+ * @param int $userid User id to use for all capability checks, etc. Set to 0 for current user (default).
  * @return \core_calendar\local\event\entities\action_interface|null
  */
 function mod_book_core_calendar_provide_event_action(calendar_event $event,
-                                                     \core_calendar\action_factory $factory) {
-    $cm = get_fast_modinfo($event->courseid)->instances['book'][$event->instance];
+                                                     \core_calendar\action_factory $factory,
+                                                     int $userid = 0) {
+    global $USER;
+
+    if (empty($userid)) {
+        $userid = $USER->id;
+    }
+
+    $cm = get_fast_modinfo($event->courseid, $userid)->instances['book'][$event->instance];
+
+    if (!$cm->uservisible) {
+        // The module is not visible to the user for any reason.
+        return null;
+    }
+
     $context = context_module::instance($cm->id);
 
-    if (!has_capability('mod/book:read', $context)) {
+    if (!has_capability('mod/book:read', $context, $userid)) {
         return null;
     }
 
     $completion = new \completion_info($cm->get_course());
 
-    $completiondata = $completion->get_data($cm, false);
+    $completiondata = $completion->get_data($cm, false, $userid);
 
     if ($completiondata->completionstate != COMPLETION_INCOMPLETE) {
         return null;

@@ -24,6 +24,7 @@
  */
 
 $string['addcomment'] = 'Add comment';
+$string['addcategory'] = 'Add category';
 $string['addentry'] = 'Add a new entry';
 $string['addingcomment'] = 'Add a comment';
 $string['alias'] = 'Keyword';
@@ -105,6 +106,7 @@ $string['defaultsortorder'] = 'Default sort order';
 $string['definition'] = 'Definition';
 $string['definitions'] = 'Definitions';
 $string['deleteentry'] = 'Delete entry';
+$string['deletecategory'] = 'Delete category';
 $string['deleteentrya'] = 'Delete entry: {$a}';
 $string['deletenotenrolled'] = 'Delete entries by users not enrolled';
 $string['deletingcomment'] = 'Deleting comment';
@@ -138,6 +140,7 @@ $string['duplicateentry'] = 'Duplicate entry';
 $string['editalways'] = 'Always allow editing';
 $string['editalways_help'] = 'This setting specifies whether entries are always editable or whether students can only edit their entries during a configured editing time (usually 30 minutes).';
 $string['editcategories'] = 'Edit categories';
+$string['editcategory'] = 'Edit category';
 $string['editentry'] = 'Edit entry';
 $string['editentrya'] = 'Edit entry: {$a}';
 $string['editingcomment'] = 'Editing comment';
@@ -218,8 +221,14 @@ $string['importentriesfromxml'] = 'Import entries from XML file';
 $string['includegroupbreaks'] = 'Include group breaks';
 $string['indicator:cognitivedepth'] = 'Glossary cognitive';
 $string['indicator:cognitivedepth_help'] = 'This indicator is based on the cognitive depth reached by the student in a Glossary activity.';
+$string['indicator:cognitivedepthdef'] = 'Glossary cognitive';
+$string['indicator:cognitivedepthdef_help'] = 'The participant has reached this percentage of the cognitive engagement offered by the Glossary activities during this analysis interval (Levels = No view, View, Submit)';
+$string['indicator:cognitivedepthdef_link'] = 'Learning_analytics_indicators#Cognitive_depth';
 $string['indicator:socialbreadth'] = 'Glossary social';
 $string['indicator:socialbreadth_help'] = 'This indicator is based on the social breadth reached by the student in a Glossary activity.';
+$string['indicator:socialbreadthdef'] = 'Glossary social';
+$string['indicator:socialbreadthdef_help'] = 'The participant has reached this percentage of the social engagement offered by the Glossary activities during this analysis interval (Levels = No participation, Participant alone)';
+$string['indicator:socialbreadthdef_link'] = 'Learning_analytics_indicators#Social_breadth';
 $string['isglobal'] = 'Is this glossary global?';
 $string['isglobal_help'] = 'A global glossary has entries which are linked to from throughout the site, rather than only in the course that the glossary is in. Only administrators can set a glossary as global.';
 $string['letter'] = 'letter';
@@ -260,6 +269,7 @@ $string['nopermissiontodelinglossary'] = 'You can\'t comments in this glossary!'
 $string['nopermissiontoviewresult'] = 'You can only look at results for your own entries';
 $string['notcategorised'] = 'Not categorised';
 $string['notapproved'] = 'glossary entry is not approved yet.';
+$string['entrynotapproved'] = 'Entry not approved';
 $string['numberofentries'] = 'Number of entries';
 $string['onebyline'] = '(one per line)';
 $string['page-mod-glossary-x'] = 'Any glossary module page';

@@ -453,6 +453,8 @@ abstract class question_engine {
 
     /**
      * Initialise the JavaScript required on pages where questions will be displayed.
+     *
+     * @return string
      */
     public static function initialise_js() {
         return question_flags::initialise_js();
@@ -582,7 +584,7 @@ class question_display_options {
     /**
      * Used in places like the question history table, to show a link to review
      * this question in a certain state. If blank, a link is not shown.
-     * @var string base URL for a review question script.
+     * @var moodle_url base URL for a review question script.
      */
     public $questionreviewlink = null;
 
@@ -694,7 +696,7 @@ abstract class question_flags {
     public static function get_postdata(question_attempt $qa) {
         $qaid = $qa->get_database_id();
         $qubaid = $qa->get_usage_id();
-        $qid = $qa->get_question()->id;
+        $qid = $qa->get_question_id();
         $slot = $qa->get_slot();
         $checksum = self::get_toggle_checksum($qubaid, $qid, $qaid, $slot);
         return "qaid={$qaid}&qubaid={$qubaid}&qid={$qid}&slot={$slot}&checksum={$checksum}&sesskey=" .
@@ -903,6 +905,47 @@ abstract class question_utils {
 
         return self::$thousands[$number / 1000 % 10] . self::$hundreds[$number / 100 % 10] .
                 self::$tens[$number / 10 % 10] . self::$units[$number % 10];
+    }
+
+    /**
+     * Convert an integer to a letter of alphabet.
+     * @param int $number an integer between 1 and 26 inclusive.
+     * Anything else will throw an exception.
+     * @return string the number converted to upper case letter of alphabet.
+     */
+    public static function int_to_letter($number) {
+        $alphabet = [
+                '1' => 'A',
+                '2' => 'B',
+                '3' => 'C',
+                '4' => 'D',
+                '5' => 'E',
+                '6' => 'F',
+                '7' => 'G',
+                '8' => 'H',
+                '9' => 'I',
+                '10' => 'J',
+                '11' => 'K',
+                '12' => 'L',
+                '13' => 'M',
+                '14' => 'N',
+                '15' => 'O',
+                '16' => 'P',
+                '17' => 'Q',
+                '18' => 'R',
+                '19' => 'S',
+                '20' => 'T',
+                '21' => 'U',
+                '22' => 'V',
+                '23' => 'W',
+                '24' => 'X',
+                '25' => 'Y',
+                '26' => 'Z'
+        ];
+        if (!is_integer($number) || $number < 1 || $number > count($alphabet)) {
+            throw new coding_exception('Only integers between 1 and 26 can be converted to letters.', $number);
+        }
+        return $alphabet[$number];
     }
 
     /**
