@@ -45,5 +45,15 @@ $tasks = array(
         'month' => '*',
         'dayofweek' => '*',
         'disabled' => 1
+    ),
+    array(
+        'classname' => 'auth_ldap\task\local_sync_task',
+        'blocking' => 0,
+        'minute' => '0',
+        'hour' => '0',
+        'day' => '*',
+        'month' => '*',
+        'dayofweek' => '*',
+        'disabled' => 1
     )
 );
