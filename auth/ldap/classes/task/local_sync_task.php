@@ -107,7 +107,7 @@ class local_sync_task extends \core\task\scheduled_task {
         $updatekeys = $this->get_profile_keys();
         foreach($users as $user) {
             if(self::$verbose) {
-                mtrace(sprintf('--> %s (%s): ', $user->username, $user->id), '');
+                mtrace(sprintf(' %s (%s): ', $user->username, $user->id), '');
             }
             if($userinfo = $this->ldapauth->get_userinfo($user->username)) {
                 $isUserSuspended = $this->is_user_suspended((object)$userinfo);
@@ -139,14 +139,24 @@ class local_sync_task extends \core\task\scheduled_task {
             }
         }
         $transaction->allow_commit();
+        $this->ldapauth->ldap_close();
+
         mtrace('');
+        $total = array_sum($this->counters);
+        $width = 0;
+        foreach (array_keys($this->counters) as $key) {
+            $keylen = strlen($key);
+            if($keylen > $width) {
+                $width = $keylen;
+            }
+        } 
+        $format = '%-'.$width.'s %'.strlen($total).'d';
         foreach ($this->counters as $key => $val) {
-            mtrace("$key: $val");
+            mtrace(sprintf($format, $key, $val));
         }
         mtrace('');
-        mtrace('total: '.array_sum($this->counters));
+        mtrace(sprintf($format, 'total', $total));
         mtrace('');
-        $this->ldapauth->ldap_close();
     }
     private function updateCounter($counter) { 
         $this->counters[$counter]++;
